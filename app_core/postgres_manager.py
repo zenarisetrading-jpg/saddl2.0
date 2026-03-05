@@ -1082,16 +1082,25 @@ class PostgresManager:
             cst   = str(row[cst_col]).lower().strip() if cst_col and pd.notna(row.get(cst_col)) else None
             mt    = str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None
 
-            for d in date_range:
+            # Flow metrics (spend, impressions, clicks) prorate evenly across days.
+            # Outcome metrics (orders, sales/revenue) are NOT prorated — they are
+            # events tied to specific moments. We assign the full total to the
+            # START date and zero to every subsequent day in the range.
+            # This preserves totals without making false assumptions about when
+            # conversions occurred.
+            imp_base, imp_rem = divmod(impressions_total, num_days)
+            clk_base, clk_rem = divmod(clicks_total,      num_days)
+
+            for i, d in enumerate(date_range):
                 records.append((
                     client_id,
                     d.date().isoformat(),
                     camp, ag, tgt, cst, mt,
-                    round(impressions_total / num_days),
-                    round(clicks_total / num_days),
+                    imp_base + (1 if i < imp_rem else 0),
+                    clk_base + (1 if i < clk_rem else 0),
                     round(spend_total / num_days, 4),
-                    round(sales_total / num_days, 4),
-                    round(orders_total / num_days),
+                    round(sales_total,  4) if i == 0 else 0.0,   # full amount on start date
+                    orders_total          if i == 0 else 0,       # full amount on start date
                 ))
         
         if not records:
