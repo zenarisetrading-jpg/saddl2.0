@@ -69,18 +69,44 @@ def render_action_distribution_chart(
     fig = go.Figure(go.Pie(
         labels=list(f_labels),
         values=list(f_values),
-        hole=0.55,
+        hole=0.60,
         marker_colors=list(f_colors),
-        textinfo="label+percent",
-        textfont=dict(size=11),
+        textinfo="none",
+        hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
+        customdata=list(f_values),
     ))
+
+    # Count in center of donut
+    fig.add_annotation(
+        text=f"<b>{action_count}</b><br><span style='font-size:11px;color:#94a3b8'>Actions</span>",
+        x=0.5, y=0.5,
+        font=dict(size=22, color="#e2e8f0"),
+        showarrow=False,
+        xref="paper", yref="paper",
+    )
+
+    # Legend with exact counts
+    legend_labels = [f"{l} ({v})" for l, v in zip(f_labels, f_values)]
+
+    fig.update_traces(
+        labels=legend_labels,
+    )
+
     fig.update_layout(
-        title=f"Actions ({action_count} total)",
+        title=dict(text="Action Distribution", font=dict(size=13, color="#94a3b8")),
         height=280,
-        margin=dict(t=40, b=20, l=10, r=10),
+        margin=dict(t=40, b=10, l=10, r=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#e2e8f0"),
-        showlegend=False,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=-0.15,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11),
+        ),
     )
     st.plotly_chart(fig, use_container_width=True)
