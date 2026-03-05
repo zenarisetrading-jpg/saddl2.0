@@ -94,7 +94,6 @@ class BaseFeature(ABC):
             
             # Check if user uploaded data
             if self.data is None:
-                st.info("📂 Upload your campaign data file above to get started.")
                 return
             
             # Validate data
