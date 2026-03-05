@@ -513,8 +513,12 @@ def _process_bucket(segment_df: pd.DataFrame, config: dict, bucket_name: str, un
         ag_stats = adgroup_lookup.get(ag_key, {})
         
         # Primary test: Target level
+        # Also covers confirmed zero-performers: roas=0 with enough clicks to decide
         if clicks > 0 and roas > 0:
             new_bid, reason, action = _classify_and_bid(roas, baseline_roas, base_bid, alpha, f"targeting|{bucket_name}", config, intel_bucket_multiplier)
+        elif clicks >= MIN_CLICKS_FOR_DECREASE and roas == 0:
+            # Zero conversions despite sufficient clicks → confirmed non-converter → bid down
+            new_bid, reason, action = _classify_and_bid(0, baseline_roas, base_bid, alpha, f"targeting|{bucket_name}", config, intel_bucket_multiplier)
         # Fallback test: AdGroup level
         elif ag_stats.get("AG_Clicks", 0) > 0 and ag_stats.get("AG_ROAS", 0) > 0:
             new_bid, reason, action = _classify_and_bid(ag_stats["AG_ROAS"], baseline_roas, base_bid, alpha * 0.5, f"adgroup|{bucket_name}", config, intel_bucket_multiplier)
