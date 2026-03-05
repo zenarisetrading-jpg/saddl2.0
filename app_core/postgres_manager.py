@@ -1086,17 +1086,32 @@ class PostgresManager:
         # Deduplicate records to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
         # The unique constraint is (client_id, report_date, campaign_name, ad_group_name, targeting, customer_search_term)
         # These correspond to indices 0, 1, 2, 3, 4, 5 in the tuple
-        seen_keys = set()
-        unique_records = []
+        # IMPORTANT: When the same key appears more than once (e.g. Amazon reports overlapping
+        # date ranges, or the same search term with different capitalisation that normalises to
+        # the same key) we ACCUMULATE metrics rather than dropping the later row.  Dropping rows
+        # would silently under-report spend vs the Excel the client uploaded.
+        seen_keys: dict = {}   # key -> index in unique_records
+        unique_records: list = []
         for r in records:
-            # Create a key tuple for the unique constraint
-            # Treat None as a distinct value, but ensure consistent hashing
             key = (r[0], r[1], r[2], r[3], r[4], r[5])
             if key not in seen_keys:
-                seen_keys.add(key)
-                unique_records.append(r)
-        
-        records = unique_records
+                seen_keys[key] = len(unique_records)
+                unique_records.append(list(r))   # mutable copy
+            else:
+                idx = seen_keys[key]
+                e = unique_records[idx]
+                # accumulate: impressions[7], clicks[8], spend[9], sales[10], orders[11]
+                unique_records[idx] = [
+                    e[0], e[1], e[2], e[3], e[4], e[5],
+                    e[6],                          # match_type – keep existing
+                    e[7] + r[7],                   # impressions
+                    e[8] + r[8],                   # clicks
+                    round(e[9]  + r[9],  4),       # spend
+                    round(e[10] + r[10], 4),       # sales
+                    e[11] + r[11],                 # orders
+                ]
+
+        records = [tuple(r) for r in unique_records]
         
         if not records:
             return 0
