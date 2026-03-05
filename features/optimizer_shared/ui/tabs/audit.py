@@ -231,6 +231,6 @@ def render_audit_tab(heatmap_df: Optional[pd.DataFrame]) -> None:
                                      "CVR": "{:.2f}%"
                                  })
 
-        st.dataframe(styled, use_container_width=True, height=500)
+        st.dataframe(styled, width='stretch', height=500)
     else:
         st.info("No heatmap data available.")

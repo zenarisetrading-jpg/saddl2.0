@@ -82,7 +82,7 @@ def render_forgot_password():
                     st.error("Unable to process request.")
 
     # 4. Back Link
-    if st.button("← Back to Log In", type="secondary", use_container_width=True):
+    if st.button("← Back to Log In", type="secondary", width='stretch'):
         st.session_state['auth_view'] = 'login'
         st.rerun()
 
@@ -180,7 +180,7 @@ def render_login():
     with col1: pass
     with col2: pass
         
-    if st.button("Forgot Password?", type="secondary", use_container_width=True):
+    if st.button("Forgot Password?", type="secondary", width='stretch'):
         st.session_state['auth_view'] = 'forgot_password'
         st.rerun()
 

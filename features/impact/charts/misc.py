@@ -69,7 +69,7 @@ def render_validation_rate_chart(impact_df: pd.DataFrame):
         paper_bgcolor='rgba(0,0,0,0)',
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def render_decision_quality_distribution(summary: Dict[str, Any]):
@@ -125,7 +125,7 @@ def render_decision_quality_distribution(summary: Dict[str, Any]):
         paper_bgcolor='rgba(0,0,0,0)',
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def render_capital_allocation_flow(impact_df: pd.DataFrame, currency: str):
@@ -200,4 +200,4 @@ def render_capital_allocation_flow(impact_df: pd.DataFrame, currency: str):
         )
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')

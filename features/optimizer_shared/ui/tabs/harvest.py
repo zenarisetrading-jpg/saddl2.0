@@ -62,7 +62,7 @@ def render_harvest_tab(harvest_df: Optional[pd.DataFrame]) -> None:
             """, unsafe_allow_html=True)
         with cta_right:
             # Store harvest data for Creator and navigate
-            if st.button("OPEN CAMPAIGN CREATOR", type="primary", use_container_width=True):
+            if st.button("OPEN CAMPAIGN CREATOR", type="primary", width='stretch'):
                 st.session_state['harvest_payload'] = harvest_df
                 st.session_state['active_creator_tab'] = "Harvest Winners"
                 st.session_state['current_module'] = 'creator'
@@ -74,6 +74,6 @@ def render_harvest_tab(harvest_df: Optional[pd.DataFrame]) -> None:
         elif "Avg Conv. Rate" in harvest_df.columns and "Source Ad Group CVR" in harvest_df.columns:
             harvest_df = harvest_df.drop(columns=["Avg Conv. Rate"], errors="ignore")
         
-        st.data_editor(harvest_df, use_container_width=True, height=400, disabled=True, hide_index=True)
+        st.data_editor(harvest_df, width='stretch', height=400, disabled=True, hide_index=True)
     else:
         st.info("No harvest candidates met the performance criteria for this period.")

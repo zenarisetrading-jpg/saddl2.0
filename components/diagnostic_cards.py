@@ -134,7 +134,7 @@ def render_visual_proof(
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         _render_card_title("Why is revenue changing?")
         fig = build_paid_vs_organic_revenue_figure(revenue)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
         _render_note(
             f"Paid trend {revenue.get('paid_trend_pct', 0):+.0f}% | Organic trend {revenue.get('organic_trend_pct', 0):+.0f}%.",
             revenue.get("diagnosis", "Check channel trend separation."),
@@ -145,7 +145,7 @@ def render_visual_proof(
         st.markdown('<div class="chart-card">', unsafe_allow_html=True)
         _render_card_title("Is organic rank improving or declining?")
         fig = build_traffic_bsr_overlay_figure(traffic_bsr, bsr)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
         _render_note(
             f"Organic {traffic_bsr.get('organic_trend_pct', 0):+.0f}% | Paid {traffic_bsr.get('paid_trend_pct', 0):+.0f}% | BSR {bsr.get('rank_change_pct', 0):+.1f}%.",
             traffic_bsr.get("diagnosis", bsr.get("diagnosis", "Insufficient data.")),
@@ -161,7 +161,7 @@ def render_visual_proof(
         fig.add_trace(go.Scatter(x=cvr.get("dates", []), y=cvr.get("paid_values", []), mode="lines", name="Paid CVR", line=dict(width=2.1, color="#ff6f6f")))
         fig.update_layout(**_base_chart_layout())
         fig.update_yaxes(title="CVR %")
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})
         _render_note(
             f"Correlation r={float(cvr.get('correlation', 0) or 0):.2f}",
             cvr.get("diagnosis", "Insufficient data."),
@@ -329,7 +329,7 @@ def render_actions(actions: Dict[str, List[Dict[str, Any]]]) -> bool:
             """
         )
 
-    return st.button("Review in Optimizer", type="primary", use_container_width=False)
+    return st.button("Review in Optimizer", type="primary", width='content')
 
 
 def render_asin_table(df: pd.DataFrame) -> None:
@@ -378,4 +378,4 @@ def render_asin_table(df: pd.DataFrame) -> None:
             if c in show_df.columns
         ]
         st.markdown('<div class="asin-toolbar">Sortable and filterable table for ASIN-level action triage.</div>', unsafe_allow_html=True)
-        st.dataframe(show_df[cols], use_container_width=True, hide_index=True)
+        st.dataframe(show_df[cols], width='stretch', hide_index=True)

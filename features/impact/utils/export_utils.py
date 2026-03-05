@@ -150,5 +150,5 @@ def render_export_button(df: pd.DataFrame, filename_prefix: str = "impact_data")
         file_name=filename,
         mime="text/csv",
         help=f"Download impact data with model version {model_version}",
-        use_container_width=False
+        width='content'
     )

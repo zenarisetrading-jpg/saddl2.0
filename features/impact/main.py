@@ -369,7 +369,7 @@ def render_impact_dashboard_v2():
                 st.caption("These actions are waiting for Amazon attribution data to settle.")
                 pending_display = pending_attr_df[['action_date', 'action_type', 'target_text', 'maturity_status']].copy()
                 pending_display.columns = ['Action Date', 'Type', 'Target', 'Status']
-                st.dataframe(pending_display, use_container_width=True, hide_index=True)
+                st.dataframe(pending_display, width='stretch', hide_index=True)
                 st.divider()
 
             if not dormant_df.empty:

@@ -125,36 +125,25 @@ def render_action_distribution_chart(
     legend_labels = [f"{l} ({v})" for l, v in zip(f_labels, f_values)]
 
     fig = go.Figure(go.Pie(
-        labels=legend_labels,
+        labels=list(f_labels),           # plain labels for legend
         values=list(f_values),
         hole=0.62,
         marker=dict(colors=list(f_colors), line=dict(color="#0f172a", width=2)),
-        textinfo="none",
+        textinfo="none",                 # no text on segments
+        text=[""] * len(f_values),       # explicit empty text safety
         hovertemplate="%{label}: %{value}<extra></extra>",
+        customdata=legend_labels,
     ))
-
-    # Count + label in centre
-    fig.add_annotation(
-        text=(
-            f"<b style='font-size:26px'>{action_count}</b>"
-            f"<br><span style='font-size:11px;color:#94a3b8'>Actions</span>"
-        ),
-        x=0.5, y=0.5,
-        showarrow=False,
-        font=dict(color="#f1f5f9", size=26),
-        xref="paper", yref="paper",
-        align="center",
-    )
 
     fig.update_layout(
         title=dict(
             text="Action Distribution",
             font=dict(size=15, color="#f1f5f9"),
-            x=0,
-            xanchor="left",
+            x=0, xanchor="left",
+            pad=dict(b=4),
         ),
+        # All annotations in one place — update_layout(annotations) overwrites add_annotation
         annotations=[
-            # subtitle
             dict(
                 text=f"Breakdown of {action_count} optimization actions",
                 xref="paper", yref="paper",
@@ -163,13 +152,12 @@ def render_action_distribution_chart(
                 font=dict(size=11, color="#475569"),
                 xanchor="left",
             ),
-            # centre count
             dict(
-                text=f"<b>{action_count}</b><br><span style='font-size:11px'>Actions</span>",
+                text=f"<b>{action_count}</b><br>Actions",
+                xref="paper", yref="paper",
                 x=0.5, y=0.5,
                 showarrow=False,
                 font=dict(size=24, color="#f1f5f9"),
-                xref="paper", yref="paper",
                 align="center",
             ),
         ],
@@ -187,6 +175,12 @@ def render_action_distribution_chart(
             x=0.5,
             font=dict(size=11, color="#94a3b8"),
             bgcolor="rgba(0,0,0,0)",
+            itemsizing="constant",
         ),
     )
-    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    # Override legend labels to include counts
+    for i, label in enumerate(legend_labels):
+        fig.data[0].labels = tuple(legend_labels)
+
+    st.plotly_chart(fig, width='stretch', config={"displayModeBar": False})

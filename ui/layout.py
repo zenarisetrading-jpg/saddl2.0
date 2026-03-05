@@ -316,41 +316,41 @@ def render_sidebar(navigate_to):
     
     st.sidebar.markdown("---")
     
-    if st.sidebar.button("Home", use_container_width=True):
+    if st.sidebar.button("Home", width='stretch'):
         safe_navigate('home')
     
-    if st.sidebar.button("Account Overview", use_container_width=True):
+    if st.sidebar.button("Account Overview", width='stretch'):
         safe_navigate('performance')
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("##### SYSTEM")
     
     # Data Hub - central upload
-    if st.sidebar.button("Data Hub", use_container_width=True):
+    if st.sidebar.button("Data Hub", width='stretch'):
         safe_navigate('data_hub')
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("##### ANALYZE")
     
     # Core features
-    if st.sidebar.button("Optimizer", use_container_width=True):
+    if st.sidebar.button("Optimizer", width='stretch'):
         safe_navigate('optimizer')
     
-    if st.sidebar.button("ASIN Shield", use_container_width=True):
+    if st.sidebar.button("ASIN Shield", width='stretch'):
         safe_navigate('asin_mapper')
     
-    if st.sidebar.button("Clusters", use_container_width=True):
+    if st.sidebar.button("Clusters", width='stretch'):
         safe_navigate('ai_insights')
     
     st.sidebar.markdown("---")
     st.sidebar.markdown("##### ACTIONS")
     
-    if st.sidebar.button("Launchpad", use_container_width=True):
+    if st.sidebar.button("Launchpad", width='stretch'):
         safe_navigate('creator')
     
     st.sidebar.markdown("---")
     
-    if st.sidebar.button("Help & Support", use_container_width=True, icon="❓"):
+    if st.sidebar.button("Help & Support", width='stretch', icon="❓"):
         safe_navigate('help_center')
     
     # Show undo toast if available
@@ -966,7 +966,7 @@ def render_home():  # noqa: C901 – intentionally large view function
             if st.button(
                 "Regenerate Analysis",
                 key="hp2_regen_top",
-                use_container_width=True,
+                width='stretch',
             ):
                 del st.session_state[cache_key]
                 st.rerun()
@@ -1118,7 +1118,7 @@ def render_home():  # noqa: C901 – intentionally large view function
         if st.button(
             "\u2192  Account Overview",
             key="hp2_nav_analytics",
-            use_container_width=True,
+            width='stretch',
         ):
             st.session_state["_nav_loading"] = True
             st.session_state["current_module"] = "performance"
@@ -1150,7 +1150,7 @@ def render_home():  # noqa: C901 – intentionally large view function
         if st.button(
             "\u2192  Optimizer",
             key="hp2_nav_optimizer",
-            use_container_width=True,
+            width='stretch',
         ):
             st.session_state["_nav_loading"] = True
             st.session_state["current_module"] = "optimizer"
@@ -1182,7 +1182,7 @@ def render_home():  # noqa: C901 – intentionally large view function
         if st.button(
             "\u2192  Impact & Results",
             key="hp2_nav_impact",
-            use_container_width=True,
+            width='stretch',
         ):
             st.session_state["_nav_loading"] = True
             st.session_state["current_module"] = "impact_v2"

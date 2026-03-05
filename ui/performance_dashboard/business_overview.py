@@ -1932,7 +1932,7 @@ def render_business_overview() -> None:
 
     with st.container(border=True):
         st.markdown("**Trend: Sessions -> Orders -> Revenue**")
-        st.plotly_chart(_build_composed_figure(trend_df, currency), use_container_width=True)
+        st.plotly_chart(_build_composed_figure(trend_df, currency), width='stretch')
 
     # --- ROW 3 + 4 ---
     mix_col, ad_col = st.columns(2)
@@ -1944,7 +1944,7 @@ def render_business_overview() -> None:
                 render_metric_card("Organic %", _format_percent(organic_pct), _delta_text(calculate_delta_pct(organic_pct, None)))
             with top_mix[1]:
                 render_metric_card("Ad Sales %", _format_percent(ad_dependency), _delta_text(calculate_delta_pct(ad_dependency, None)))
-            st.plotly_chart(_build_paid_vs_organic_figure(trend_df, currency), use_container_width=True)
+            st.plotly_chart(_build_paid_vs_organic_figure(trend_df, currency), width='stretch')
 
     with ad_col:
         _section_header("Ad Impact", "Ads as a business lever (not campaign detail)")
@@ -1965,7 +1965,7 @@ def render_business_overview() -> None:
                 & (ad_spend_daily["report_date"].dt.date <= data["end_date"])
             ].copy() if not ad_spend_daily.empty else pd.DataFrame()
             tacos_series = build_tacos_daily_series(account_curr, curr_ad_daily)
-            st.plotly_chart(build_tacos_trend_figure(tacos_series, 0.15), use_container_width=True)
+            st.plotly_chart(build_tacos_trend_figure(tacos_series, 0.15), width='stretch')
             if tacos_series.empty:
                 st.caption("No valid TACOS points in selected window after excluding days with zero/null total sales.")
 

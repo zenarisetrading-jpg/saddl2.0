@@ -358,7 +358,7 @@ def render_roas_attribution_bar(
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
     
     # --- VISUAL EQUATION (v3.4) ---
     equation_html = (

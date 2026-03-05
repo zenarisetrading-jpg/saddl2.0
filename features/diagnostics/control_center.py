@@ -34,7 +34,7 @@ def render_control_center(client_id: str):
         st.markdown('<div class="diag-title-lg">Diagnostic Control Center</div>', unsafe_allow_html=True)
         st.markdown('<div class="diag-text-sm">Visual proof + multi-dimensional action planning</div>', unsafe_allow_html=True)
     with c2:
-        if st.button("Refresh Analysis", type="primary", use_container_width=True):
+        if st.button("Refresh Analysis", type="primary", width='stretch'):
             st.cache_data.clear()
             st.rerun()
 

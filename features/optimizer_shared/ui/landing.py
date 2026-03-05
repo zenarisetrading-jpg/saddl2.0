@@ -692,7 +692,7 @@ def render_landing_page(config: dict):
             st.markdown(f'<div class="strategy-card-svg">{shield_svg}</div>', unsafe_allow_html=True)
             st.button(
                 "**Conservative**\n\nSafer, gradual changes",
-                use_container_width=True,
+                width='stretch',
                 type=btn_type,
                 key="strat_conservative",
                 on_click=set_profile,
@@ -704,7 +704,7 @@ def render_landing_page(config: dict):
             st.markdown(f'<div class="strategy-card-svg">{sliders_svg}</div>', unsafe_allow_html=True)
             st.button(
                 "**Balanced**\n\nOptimal risk-reward",
-                use_container_width=True,
+                width='stretch',
                 type=btn_type,
                 key="strat_balanced",
                 on_click=set_profile,
@@ -716,7 +716,7 @@ def render_landing_page(config: dict):
             st.markdown(f'<div class="strategy-card-svg">{zap_svg}</div>', unsafe_allow_html=True)
             st.button(
                 "**Aggressive**\n\nFaster, bigger moves",
-                use_container_width=True,
+                width='stretch',
                 type=btn_type,
                 key="strat_aggressive",
                 on_click=set_profile,
@@ -744,7 +744,7 @@ def render_landing_page(config: dict):
             st.button(
                 "⚡ Start Optimization →", 
                 type="primary", 
-                use_container_width=True, 
+                width='stretch', 
                 key="start_opt_btn",
                 on_click=start_optimization
             )

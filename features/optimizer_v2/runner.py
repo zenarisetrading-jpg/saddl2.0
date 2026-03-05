@@ -195,7 +195,7 @@ def _render_preview_table(df: pd.DataFrame, columns: list, reason_col: str = "Re
         column_config[reason_col] = st.column_config.TextColumn(reason_col, width="large")
     st.dataframe(
         table,
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
         height=240,
         column_config=column_config,
@@ -572,7 +572,7 @@ def _render_v2_results_view():
 
     save_col, _ = st.columns([1, 2])
     with save_col:
-        if st.button("💾 Save Run to History", type="primary", use_container_width=True, key="v2_runner_save_run"):
+        if st.button("💾 Save Run to History", type="primary", width='stretch', key="v2_runner_save_run"):
             try:
                 from features.optimizer_shared.logging import log_optimization_events, flush_pending_actions_to_db
                 import datetime

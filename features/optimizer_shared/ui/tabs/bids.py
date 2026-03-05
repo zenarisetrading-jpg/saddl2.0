@@ -94,7 +94,7 @@ def render_bids_tab(
                  display_cols.append("Validation Issues")
             st.data_editor(
                 df_ui[display_cols], 
-                use_container_width=True, 
+                width='stretch', 
                 height=440, 
                 disabled=True, 
                 hide_index=True,

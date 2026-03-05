@@ -302,7 +302,7 @@ def render_tier1_campaign_panel(campaign_recs: pd.DataFrame) -> list[str]:
             disp = [c for c in ["campaign_name", "roas", "orders", "efficiency_ratio"] if c in maintain.columns]
             st.dataframe(
                 maintain[disp],
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
                 column_config={
                     "campaign_name":    st.column_config.TextColumn("Campaign"),

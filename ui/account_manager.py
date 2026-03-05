@@ -83,7 +83,7 @@ def render_account_selector():
         
         # Show current account with option to add more
         st.sidebar.markdown(f"**Account:** {account_name}")
-        if st.sidebar.button("➕ Add Account", use_container_width=True, key="add_account_single"):
+        if st.sidebar.button("➕ Add Account", width='stretch', key="add_account_single"):
             st.session_state['show_account_form'] = True
         
         # Show form if requested

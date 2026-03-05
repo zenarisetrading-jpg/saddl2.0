@@ -30,7 +30,7 @@ def render_negatives_tab(neg_kw: pd.DataFrame, neg_pt: pd.DataFrame, extract_val
             return
         with st.expander("Show technical IDs", expanded=False):
             base_cols = [c for c in ["Campaign Name", "Ad Group Name", "Term", "Targeting"] if c in df.columns]
-            st.dataframe(df[base_cols + id_cols], use_container_width=True, hide_index=True, height=220)
+            st.dataframe(df[base_cols + id_cols], width='stretch', hide_index=True, height=220)
     
     def tab_header(label, icon_html):
         st.markdown(f"""
@@ -74,7 +74,7 @@ def render_negatives_tab(neg_kw: pd.DataFrame, neg_pt: pd.DataFrame, extract_val
             cols = list(neg_kw_ui.columns)
             if not st.session_state.get("opt_show_ids", False):
                 cols = [c for c in cols if c not in hidden_default_cols and "Basis" not in c and "Validation Issues" not in c]
-            st.data_editor(neg_kw_ui[cols], use_container_width=True, height=400, disabled=True, hide_index=True)
+            st.data_editor(neg_kw_ui[cols], width='stretch', height=400, disabled=True, hide_index=True)
             if not st.session_state.get("opt_show_ids", False):
                 _render_id_details(neg_kw_ui)
         else:
@@ -87,7 +87,7 @@ def render_negatives_tab(neg_kw: pd.DataFrame, neg_pt: pd.DataFrame, extract_val
             cols = list(neg_pt_ui.columns)
             if not st.session_state.get("opt_show_ids", False):
                 cols = [c for c in cols if c not in hidden_default_cols and "Basis" not in c and "Validation Issues" not in c]
-            st.data_editor(neg_pt_ui[cols], use_container_width=True, height=400, disabled=True, hide_index=True)
+            st.data_editor(neg_pt_ui[cols], width='stretch', height=400, disabled=True, hide_index=True)
             if not st.session_state.get("opt_show_ids", False):
                 _render_id_details(neg_pt_ui)
         else:

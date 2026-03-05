@@ -834,7 +834,7 @@ def render_impact_dashboard():
                 
                 pending_display = pending_attr_df[['action_date', 'action_type', 'target_text', 'maturity_status']].copy()
                 pending_display.columns = ['Action Date', 'Type', 'Target', 'Status']
-                st.dataframe(pending_display, use_container_width=True, hide_index=True)
+                st.dataframe(pending_display, width='stretch', hide_index=True)
                 st.divider()
             
             # Section 2: Dormant (zero spend)
@@ -1416,7 +1416,7 @@ def _render_details_table_collapsed(impact_df: pd.DataFrame, currency: str):
         # Use column_config for currency formatting while keeping numeric sorting
         st.dataframe(
             display_df, 
-            use_container_width=True, 
+            width='stretch', 
             hide_index=True, 
             height=400,
             column_config={
@@ -1521,7 +1521,7 @@ def _render_validation_rate_chart(impact_df: pd.DataFrame):
         showlegend=False
     )
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
     
     total = len(impact_df)
     if total > 0:
@@ -2029,7 +2029,7 @@ def _render_roas_attribution_bar(summary: Dict[str, Any], impact_df: pd.DataFram
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
     
     # --- VISUAL EQUATION ---
     # --- VISUAL EQUATION ---
@@ -2275,7 +2275,7 @@ def _render_cumulative_impact_chart(impact_df: pd.DataFrame, currency: str):
         hovermode='x unified'
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Trend message
     if len(daily) >= 2:
@@ -2552,7 +2552,7 @@ def _render_new_impact_analytics(summary: Dict[str, Any], impact_df: pd.DataFram
                 font={'family': "Inter, sans-serif"}
             )
             
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
             
             st.markdown(f"""
 <div style="text-align: center; margin-top: -30px; margin-bottom: 24px;"><div style="color: #94A3B8; font-size: 0.85rem; font-weight: 500;">Measurement Coverage</div></div>
@@ -2639,7 +2639,7 @@ def _render_debug_console(impact_df: pd.DataFrame):
 
         st.dataframe(
             df_debug[cols].sort_values('decision_impact', ascending=False),
-            use_container_width=True,
+            width='stretch',
             height=400,
             column_config={
                 "cpc_before": st.column_config.NumberColumn("CPC Pre", format="%.3f"),
@@ -2810,7 +2810,7 @@ def _render_decision_outcome_matrix(impact_df: pd.DataFrame, summary: Dict[str, 
         annotations=annotations
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # How to read this chart (subtle styling)
     st.markdown("""
@@ -2877,7 +2877,7 @@ def _render_decision_quality_distribution(summary: Dict[str, Any]):
         showlegend=False
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Important copy
     st.caption("*Neutrals excluded to focus on signal, not noise.*")
@@ -2975,7 +2975,7 @@ def _render_capital_allocation_flow(impact_df: pd.DataFrame, currency: str):
         font=dict(color='#e2e8f0', size=11)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
     
     # Summary stats
     spend_delta = total_after - total_before
@@ -3122,7 +3122,7 @@ def _render_attribution_waterfall(summary: Dict[str, Any], impact_df: pd.DataFra
         xaxis=dict(showgrid=False, tickfont=dict(color='#cbd5e1', size=12))
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_stacked_revenue_bar(summary: Dict[str, Any], currency: str, validated_only: bool = True):
@@ -3188,7 +3188,7 @@ def _render_stacked_revenue_bar(summary: Dict[str, Any], currency: str, validate
             xaxis=dict(showgrid=False, tickfont=dict(color='#cbd5e1', size=12))
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
     elif roas_before > 0 or roas_after > 0:
         # Fallback: Show ROAS comparison bars with brand colors
@@ -3210,7 +3210,7 @@ def _render_stacked_revenue_bar(summary: Dict[str, Any], currency: str, validate
             yaxis=dict(showgrid=True, gridcolor='rgba(128,128,128,0.1)', title="ROAS", tickfont=dict(color='#94a3b8', size=12)),
             xaxis=dict(showgrid=False)
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
     else:
         st.info("No comparative data")
 
@@ -3286,7 +3286,7 @@ def _render_waterfall_chart(summary: Dict[str, Any]):
         xaxis=dict(showgrid=False)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_roas_comparison(summary: Dict[str, Any]):
@@ -3336,7 +3336,7 @@ def _render_roas_comparison(summary: Dict[str, Any]):
         xaxis=dict(showgrid=False)
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_winners_losers_chart(impact_df: pd.DataFrame):
@@ -3423,7 +3423,7 @@ def _render_winners_losers_chart(impact_df: pd.DataFrame):
     )
 
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
 
 def _render_drill_down_table(impact_df: pd.DataFrame, show_migration_badge: bool = False):
@@ -3563,7 +3563,7 @@ def _render_drill_down_table(impact_df: pd.DataFrame, show_migration_badge: bool
         
         st.dataframe(
             display_df,
-            use_container_width=True,
+            width='stretch',
             column_config={
                 "Decision Impact": st.column_config.TextColumn(
                     "Decision Impact",
@@ -3617,7 +3617,7 @@ def _render_dormant_table(dormant_df: pd.DataFrame):
         'reason': 'Reason'
     })
     
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, width='stretch', hide_index=True)
     
     st.caption(f"💡 These {len(dormant_df)} optimizations have an established baseline but are pending traffic. "
               "They will appear in Measured Impact once the targets receive impressions.")
@@ -4091,7 +4091,7 @@ def _render_revenue_counterfactual_chart(impact_df: pd.DataFrame, client_id: str
         align="center"
     )
     
-    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False}, key=f"rev_impact_chart_{cache_version}_{client_id}")
+    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False}, key=f"rev_impact_chart_{cache_version}_{client_id}")
 
 
     

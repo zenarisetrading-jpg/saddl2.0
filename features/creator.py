@@ -102,12 +102,12 @@ class CreatorModule(BaseFeature):
         c1, c2 = st.columns(2)
         with c1:
             is_active = st.session_state['active_creator_tab'] == "Launch New Product"
-            if st.button("🚀 Launch New Product", key="btn_tab_launch", use_container_width=True, type="primary" if is_active else "secondary"):
+            if st.button("🚀 Launch New Product", key="btn_tab_launch", width='stretch', type="primary" if is_active else "secondary"):
                 st.session_state['active_creator_tab'] = "Launch New Product"
                 st.rerun()
         with c2:
             is_active = st.session_state['active_creator_tab'] == "Harvest Winners"
-            if st.button("🌿 Harvest Winners", key="btn_tab_harvest", use_container_width=True, type="primary" if is_active else "secondary"):
+            if st.button("🌿 Harvest Winners", key="btn_tab_harvest", width='stretch', type="primary" if is_active else "secondary"):
                 st.session_state['active_creator_tab'] = "Harvest Winners"
                 st.rerun()
                 
@@ -159,7 +159,7 @@ class CreatorModule(BaseFeature):
                 use_auto_pt = st.checkbox("Enable Auto-PT Multipliers", value=True)
                 top_n_kw = st.number_input("Limit Keywords (0=All)", 0, 500, 0)
         
-        if st.button("Generate Launch Campaigns", type="primary", use_container_width=True):
+        if st.button("Generate Launch Campaigns", type="primary", width='stretch'):
             if not sku_input:
                 st.error("Please enter at least one SKU.")
                 return
@@ -198,7 +198,7 @@ class CreatorModule(BaseFeature):
             )
             
             # Preview & Export
-            st.dataframe(bulk_df.head(100), use_container_width=True)
+            st.dataframe(bulk_df.head(100), width='stretch')
             
             # Download
             metadata = {
@@ -458,9 +458,9 @@ class CreatorModule(BaseFeature):
             
         list_icon = f'<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8F8CA3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 8px;"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>'
         st.markdown(f"<h4 style='display: flex; align-items: center; font-family: Inter, sans-serif; font-weight: 600; margin-bottom: 12px;'>{list_icon} Verify Candidates</h4>", unsafe_allow_html=True)
-        st.dataframe(df_harvest, use_container_width=True)
+        st.dataframe(df_harvest, width='stretch')
         
-        if st.button("Generate Harvest Campaigns", type="primary", key="btn_gen_harvest", use_container_width=True):
+        if st.button("Generate Harvest Campaigns", type="primary", key="btn_gen_harvest", width='stretch'):
             
             # -------------------------------------------------------------
             # PRE-PROCESSING: Restore "Original Structure" & Naming Logic
@@ -546,7 +546,7 @@ class CreatorModule(BaseFeature):
             
             # Preview
             with st.expander("👁️ Preview Rows", expanded=False):
-                st.dataframe(bulk_df, use_container_width=True)
+                st.dataframe(bulk_df, width='stretch')
             
             st.download_button(
                 "📥 Download Harvest File (.xlsx)",
@@ -587,10 +587,10 @@ class CreatorModule(BaseFeature):
                 c1, c2 = st.columns(2)
                 with c1:
                     st.caption("Harvest Candidates (Target)")
-                    st.dataframe(harvest_df[['Campaign Name', 'Customer Search Term', 'Advertised SKU']].head(), use_container_width=True)
+                    st.dataframe(harvest_df[['Campaign Name', 'Customer Search Term', 'Advertised SKU']].head(), width='stretch')
                 with c2:
                     st.caption("Advertised Product Report (Source)")
-                    st.dataframe(camp_df.head(), use_container_width=True)
+                    st.dataframe(camp_df.head(), width='stretch')
                 
                 st.write(f"**Mapping Keys**: Campaign='{c_col}', AdGroup='{ag_col}', SKU='{s_col}'")
                 sample_camp = camp_df[c_col].iloc[0] if not camp_df.empty else "N/A"

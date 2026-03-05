@@ -846,7 +846,7 @@ def render_results_dashboard(results: dict):
         with c_btns:
             # Buttons are now natively in the same container/row
             st.markdown('<div style="height: 4px"></div>', unsafe_allow_html=True) # Visual alignment tweak
-            if st.button("💾 Save to History", type="primary", use_container_width=True, key="btn_save_run_hero"):
+            if st.button("💾 Save to History", type="primary", width='stretch', key="btn_save_run_hero"):
                 level, message = _save_run_to_history(results)
                 if level == "success":
                     st.success(f"✅ {message}")
@@ -859,7 +859,7 @@ def render_results_dashboard(results: dict):
             
             st.markdown('<div style="height: 6px"></div>', unsafe_allow_html=True)
             
-            if st.button("🔄 Rerun Optimizer", type="secondary", use_container_width=True, key="btn_rerun_opt"):
+            if st.button("🔄 Rerun Optimizer", type="secondary", width='stretch', key="btn_rerun_opt"):
                 if 'optimizer_results_refactored' in st.session_state:
                     del st.session_state['optimizer_results_refactored']
                 st.rerun()
@@ -960,7 +960,7 @@ def render_results_dashboard(results: dict):
                 if st.button(
                     tab,
                     key=f"tab_{tab}",
-                    use_container_width=True,
+                    width='stretch',
                     type="primary" if st.session_state["active_opt_tab"] == tab else "secondary",
                 ):
                     st.session_state["active_opt_tab"] = tab
@@ -1012,7 +1012,7 @@ def render_results_dashboard(results: dict):
             ])
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.dataframe(all_negs, use_container_width=True)
+            st.dataframe(all_negs, width='stretch')
         else:
             st.info("No negative recommendations generated.")
 
@@ -1029,7 +1029,8 @@ def render_results_dashboard(results: dict):
             ])
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.dataframe(all_bids, use_container_width=True)
+            _display_cols = [c for c in all_bids.columns if c != "recommendation"]
+            st.dataframe(all_bids[_display_cols], width='stretch')
         else:
             st.info("No bid adjustments generated.")
 
@@ -1046,14 +1047,14 @@ def render_results_dashboard(results: dict):
                 {"label": "Launch", "value": "Ready", "subtext": "Push to Campaign Creator", "accent": "#a78bfa"},
             ])
 
-            if st.button("🚀 Launch in Campaign Creator", key="btn_goto_harvest_creator", use_container_width=True, type="primary"):
+            if st.button("🚀 Launch in Campaign Creator", key="btn_goto_harvest_creator", width='stretch', type="primary"):
                 st.session_state['harvest_payload'] = harvest
                 st.session_state['active_creator_tab'] = "Harvest Winners"
                 st.session_state['current_module'] = 'creator'
                 st.rerun()
 
             st.markdown("<br>", unsafe_allow_html=True)
-            st.dataframe(harvest, use_container_width=True)
+            st.dataframe(harvest, width='stretch')
         else:
             st.info("No harvest candidates identified.")
 
@@ -1099,7 +1100,7 @@ def render_results_dashboard(results: dict):
                 
                 # Preview Window
                 with st.expander("👁️ Preview File", expanded=False):
-                    st.dataframe(neg_bulk_df, use_container_width=True, height=200)
+                    st.dataframe(neg_bulk_df, width='stretch', height=200)
 
                 neg_xlsx = dataframe_to_excel(neg_bulk_df)
                 st.download_button(
@@ -1107,14 +1108,14 @@ def render_results_dashboard(results: dict):
                     neg_xlsx,
                     "negatives_bulk.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    width='stretch'
                 )
                 if neg_issues:
                     with st.expander(f"⚠️ {len(neg_issues)} validation issues"):
                         for issue in neg_issues[:5]:  # Show first 5
                             st.caption(f"• {issue.get('msg', 'Unknown issue')}")
             else:
-                st.button("📥 Download Negatives", disabled=True, use_container_width=True)
+                st.button("📥 Download Negatives", disabled=True, width='stretch')
 
         with col2:
             st.markdown(f"""
@@ -1135,7 +1136,7 @@ def render_results_dashboard(results: dict):
                 
                 # Preview Window
                 with st.expander("👁️ Preview File", expanded=False):
-                    st.dataframe(bids_bulk_df, use_container_width=True, height=200)
+                    st.dataframe(bids_bulk_df, width='stretch', height=200)
 
                 bids_xlsx = dataframe_to_excel(bids_bulk_df)
                 st.download_button(
@@ -1143,14 +1144,14 @@ def render_results_dashboard(results: dict):
                     bids_xlsx,
                     "bids_bulk.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    width='stretch'
                 )
                 if bids_issues:
                     with st.expander(f"⚠️ {len(bids_issues)} validation issues"):
                         for issue in bids_issues[:5]:
                             st.caption(f"• {issue.get('msg', 'Unknown issue')}")
             else:
-                st.button("📥 Download Bids", disabled=True, use_container_width=True)
+                st.button("📥 Download Bids", disabled=True, width='stretch')
 
         with col3:
             st.markdown(f"""
@@ -1171,7 +1172,7 @@ def render_results_dashboard(results: dict):
 
                 # Preview Window
                 with st.expander("👁️ Preview File", expanded=False):
-                    st.dataframe(harv_bulk_df, use_container_width=True, height=200)
+                    st.dataframe(harv_bulk_df, width='stretch', height=200)
 
                 harv_xlsx = dataframe_to_excel(harv_bulk_df)
                 st.download_button(
@@ -1179,10 +1180,10 @@ def render_results_dashboard(results: dict):
                     harv_xlsx,
                     "harvest_bulk.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
+                    width='stretch'
                 )
             else:
-                st.button("📥 Download Harvest", disabled=True, use_container_width=True)
+                st.button("📥 Download Harvest", disabled=True, width='stretch')
 
         st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1193,5 +1194,5 @@ def render_results_dashboard(results: dict):
         </div>
         """, unsafe_allow_html=True)
 
-        if st.button("📦 Download All Files (ZIP)", type="primary", use_container_width=True):
+        if st.button("📦 Download All Files (ZIP)", type="primary", width='stretch'):
             st.info("Bulk download feature coming soon!")

@@ -462,15 +462,15 @@ def render_data_hub():
             # 3 CTAs - All primary style with SVG icons
             c1, c2, c3 = st.columns(3)
             with c1:
-                if st.button("Account Overview", use_container_width=True, type="primary", key="cta_overview"):
+                if st.button("Account Overview", width='stretch', type="primary", key="cta_overview"):
                     st.session_state['current_module'] = 'performance'
                     st.rerun()
             with c2:
-                if st.button("Run Optimizer", use_container_width=True, type="primary", key="cta_optimizer"):
+                if st.button("Run Optimizer", width='stretch', type="primary", key="cta_optimizer"):
                     st.session_state['current_module'] = 'optimizer'
                     st.rerun()
             with c3:
-                if st.button("Ask AI Strategist", use_container_width=True, type="primary", key="cta_ai"):
+                if st.button("Ask AI Strategist", width='stretch', type="primary", key="cta_ai"):
                     st.session_state['current_module'] = 'assistant'
                     st.rerun()
         else:

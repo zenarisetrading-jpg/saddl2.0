@@ -83,7 +83,7 @@ class AIInsightsModule(BaseFeature):
                 st.error(f"❌ Data Validation Failed: {msg}")
                 return
                 
-            if st.button("🚀 Run Cluster Analysis", type="primary", use_container_width=True):
+            if st.button("🚀 Run Cluster Analysis", type="primary", width='stretch'):
                 with st.spinner("Analyzing semantic patterns..."):
                     results = self.analyze(self.data)
                     
@@ -100,7 +100,7 @@ class AIInsightsModule(BaseFeature):
                             data=output_file,
                             file_name="ai_cluster_insights.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                            use_container_width=True
+                            width='stretch'
                         )
     
     def validate_data(self, data: pd.DataFrame) -> tuple[bool, str]:
@@ -352,7 +352,7 @@ class AIInsightsModule(BaseFeature):
         
         st.dataframe(
             display_df[display_cols],
-            use_container_width=True,
+            width='stretch',
             column_config={
                 'cluster_id': 'ID',
                 'size': 'Terms',

@@ -305,7 +305,7 @@ def _render_error_state(title: str, message: str, show_login_link: bool = False)
         st.markdown("<br>", unsafe_allow_html=True)
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            if st.button("Go to Login", type="primary", use_container_width=True):
+            if st.button("Go to Login", type="primary", width='stretch'):
                 # Clear query params and redirect to login
                 st.query_params.clear()
                 st.session_state['auth_view'] = 'login'
@@ -477,7 +477,7 @@ def _render_account_setup_form(invitation: Invitation, token: str):
 
     # Back to login link
     st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("Already have an account? Log in", type="secondary", use_container_width=True):
+    if st.button("Already have an account? Log in", type="secondary", width='stretch'):
         st.query_params.clear()
         st.session_state['auth_view'] = 'login'
         st.rerun()

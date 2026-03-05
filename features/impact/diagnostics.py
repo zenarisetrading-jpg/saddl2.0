@@ -115,7 +115,7 @@ def _render_current_view(df: pd.DataFrame, summary: Dict[str, Any]) -> None:
         "decision_value_pct",
     ]
     available_cols = [c for c in display_cols if c in df.columns]
-    st.dataframe(df[available_cols].head(20), use_container_width=True)
+    st.dataframe(df[available_cols].head(20), width='stretch')
 
 
 def _render_db_only_view(df: pd.DataFrame, summary: Dict[str, Any]) -> None:
@@ -156,7 +156,7 @@ def _render_db_only_view(df: pd.DataFrame, summary: Dict[str, Any]) -> None:
         "decision_value_pct",
     ]
     available_cols = [c for c in display_cols if c in df.columns]
-    st.dataframe(df[available_cols].head(20), use_container_width=True)
+    st.dataframe(df[available_cols].head(20), width='stretch')
 
 
 def _render_divergence_analysis(current_df: pd.DataFrame, db_df: pd.DataFrame) -> None:
@@ -322,7 +322,7 @@ def _render_classification_diff(current_df: pd.DataFrame, db_df: pd.DataFrame) -
             }
         )
 
-    st.dataframe(pd.DataFrame(diff_data), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(diff_data), width='stretch', hide_index=True)
 
 
 def _render_mismatch_table(current_df: pd.DataFrame, db_df: pd.DataFrame) -> None:
@@ -361,7 +361,7 @@ def _render_mismatch_table(current_df: pd.DataFrame, db_df: pd.DataFrame) -> Non
             }
         )
 
-    st.dataframe(pd.DataFrame(mismatch_rows), use_container_width=True, hide_index=True)
+    st.dataframe(pd.DataFrame(mismatch_rows), width='stretch', hide_index=True)
 
 
 def _render_quadrant_validation(current_df: pd.DataFrame, db_df: pd.DataFrame) -> None:
@@ -409,7 +409,7 @@ def _render_quadrant_validation(current_df: pd.DataFrame, db_df: pd.DataFrame) -
     fig.add_annotation(x=50, y=-50, text="Gap", showarrow=False)
     fig.add_annotation(x=-50, y=-50, text="Market Drag", showarrow=False)
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width='stretch')
 
     _check_quadrant_mismatches(plot_df)
 
@@ -448,7 +448,7 @@ def _check_quadrant_mismatches(df: pd.DataFrame) -> None:
     mismatch_df = check_df[mismatch_mask][
         ["target_text", "action_type", "market_tag", "computed_quadrant", "before_clicks"]
     ].head(20)
-    st.dataframe(mismatch_df, use_container_width=True, hide_index=True)
+    st.dataframe(mismatch_df, width='stretch', hide_index=True)
 
     st.markdown("**Likely Causes:**")
     low_sample = (check_df[mismatch_mask]["before_clicks"] < 5).sum() if "before_clicks" in check_df.columns else 0
@@ -558,7 +558,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
     
     col1, col2 = st.columns([1, 2])
     with col1:
-        st.dataframe(reason_counts, use_container_width=True, hide_index=True)
+        st.dataframe(reason_counts, width='stretch', hide_index=True)
         
     with col2:
         with st.expander("Inspect Excluded Rows"):
@@ -567,7 +567,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
                     'action_date', 'campaign_name', 'target_text', 
                     'confidence_tier', 'tier_flags', 'before_spend', 'observed_after_spend'
                 ]].sort_values('before_spend', ascending=False),
-                use_container_width=True
+                width='stretch'
             )
             
     st.divider()
@@ -598,7 +598,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
         )
         fig.update_traces(textinfo="percent+label")
         fig.update_layout(showlegend=False, margin=dict(t=20, b=20, l=20, r=20))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     with col2:
         st.markdown("#### Baseline Spend by Tier")
@@ -618,7 +618,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
                     "Baseline Spend": "${:,.0f}", 
                     "% Spend": "{:.1f}%"
                 }), 
-                use_container_width=True
+                width='stretch'
             )
             
             headline_spend = summary_df[summary_df["Tier"].isin(["gold", "silver"])]["% Spend"].sum()
@@ -662,7 +662,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
         }
         flag_counts["Description"] = flag_counts["Flag Code"].map(descriptions).fillna("Unknown")
         
-        st.dataframe(flag_counts, use_container_width=True)
+        st.dataframe(flag_counts, width='stretch')
     else:
         st.warning("tier_flags column missing")
 
@@ -671,7 +671,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
     if "match_level" in df.columns:
         match_counts = df["match_level"].value_counts().reset_index()
         match_counts.columns = ["Match Level", "Count"]
-        st.dataframe(match_counts, use_container_width=True)
+        st.dataframe(match_counts, width='stretch')
 
     # 4. Calibration Check (Silver Weight)
     st.markdown("#### Silver Tier Weight Check")
@@ -684,7 +684,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
             title="Distribution of Confidence Weights (Silver Tier)",
             labels={"confidence_weight": "Weight (0.25 - 0.84)"}
         )
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, width='stretch')
 
     st.divider()
 
@@ -730,7 +730,7 @@ def _render_confidence_tier_view(df: pd.DataFrame) -> None:
             "campaign_spc_median": "${:,.2f}",
             "confidence_weight": "{:.3f}"
         }),
-        use_container_width=True,
+        width='stretch',
         height=500
     )
 
@@ -846,7 +846,7 @@ def _render_v33_debug(df: pd.DataFrame) -> None:
             xaxis_title="Attribute"
         )
         
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
         
         # Insight Text
         external_pct = (market_effect + cpc_effect) / total_change * 100 if total_change != 0 else 0
@@ -885,6 +885,6 @@ def _render_v33_debug(df: pd.DataFrame) -> None:
                 'diff_v33': '+${:,.2f}',
                 'scale_factor': '{:.3f}'
             }),
-            use_container_width=True
+            width='stretch'
         )
 

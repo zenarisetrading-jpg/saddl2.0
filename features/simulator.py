@@ -564,7 +564,7 @@ class SimulatorModule(BaseFeature):
                 "Orders": "{:.0f}",
                 "ACoS": "{:.1f}%"
             }),
-            use_container_width=True,
+            width='stretch',
             hide_index=True
         )
         
@@ -643,6 +643,6 @@ class SimulatorModule(BaseFeature):
                 hovermode="closest"
             )
             
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
+            st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
 
 

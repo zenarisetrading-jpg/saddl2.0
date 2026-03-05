@@ -45,7 +45,7 @@ def render_details_table(impact_df: pd.DataFrame, currency: str):
         }
         display_df = display_df.rename(columns=column_names)
 
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)
 
 
 def render_drill_down_table(impact_df: pd.DataFrame, show_migration_badge: bool = False):
@@ -122,7 +122,7 @@ def render_drill_down_table(impact_df: pd.DataFrame, show_migration_badge: bool 
         subset_df = display_df[available_cols].copy()
         if impact_col in subset_df.columns:
             subset_df = subset_df.rename(columns={impact_col: 'Impact'})
-        st.dataframe(subset_df, use_container_width=True, hide_index=True)
+        st.dataframe(subset_df, width='stretch', hide_index=True)
 
 
 def render_dormant_table(dormant_df: pd.DataFrame):
@@ -139,4 +139,4 @@ def render_dormant_table(dormant_df: pd.DataFrame):
     if available_cols:
         display_df = dormant_df[available_cols].copy()
         display_df.columns = ['Date', 'Type', 'Target'][:len(available_cols)]
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+        st.dataframe(display_df, width='stretch', hide_index=True)

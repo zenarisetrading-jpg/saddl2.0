@@ -234,7 +234,7 @@ def run_performance_hub():
             if st.button(
                 "BUSINESS OVERVIEW",
                 key="btn_business_overview",
-                use_container_width=True,
+                width='stretch',
                 type="primary" if st.session_state["active_perf_tab"] == "Business Overview" else "secondary",
             ):
                 st.session_state["_nav_loading"] = True
@@ -246,7 +246,7 @@ def run_performance_hub():
                 if st.button(
                     "ACCOUNT OVERVIEW (LEGACY)",
                     key="btn_account_overview_legacy",
-                    use_container_width=True,
+                    width='stretch',
                     type="primary" if st.session_state["active_perf_tab"] == "Client Report" else "secondary",
                 ):
                     st.session_state["_nav_loading"] = True
@@ -258,7 +258,7 @@ def run_performance_hub():
                 if st.button(
                     "PPC OVERVIEW",
                     key="btn_ppc_overview",
-                    use_container_width=True,
+                    width='stretch',
                     type="primary" if st.session_state["active_perf_tab"] == "PPC Overview" else "secondary",
                 ):
                     st.session_state["_nav_loading"] = True
@@ -672,7 +672,7 @@ def main():
         # Logout button (compact)
         from app_core.auth.service import AuthService
         auth = AuthService()
-        if st.button("⏻ Logout", key="sidebar_logout", use_container_width=True, help="Sign out"):
+        if st.button("⏻ Logout", key="sidebar_logout", width='stretch', help="Sign out"):
             auth.sign_out()
             st.rerun()
         
@@ -730,7 +730,7 @@ def main():
             active_class = "active" if is_active else ""
             
             # Use a transparent button over the chiclet for interactivity
-            if st.button(label, key=f"nav_{module_key}", use_container_width=True):
+            if st.button(label, key=f"nav_{module_key}", width='stretch'):
                 # Check if leaving optimizer with pending actions
                 if st.session_state.get('current_module') == 'optimizer' and st.session_state.get('pending_actions'):
                     # Trigger confirmation dialog instead of navigating
@@ -808,7 +808,7 @@ def main():
             with col1:
                 st.markdown(f'<div style="margin-top: 5px; margin-left: 5px; opacity: {"1.0" if is_active else "0.6"};">{icon_html}</div>', unsafe_allow_html=True)
             with col2:
-                if st.button(label, use_container_width=True, key=f"nav_btn_v6_{key}"):
+                if st.button(label, width='stretch', key=f"nav_btn_v6_{key}"):
                     safe_navigate(key)
             st.markdown('</div>', unsafe_allow_html=True)
 
