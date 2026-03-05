@@ -1035,28 +1035,50 @@ class PostgresManager:
         cst_col = next((c for c in ['Customer Search Term', 'customer_search_term'] if c in df.columns), None)
         mt_col = next((c for c in ['Match Type', 'match_type'] if c in df.columns), None)
         
-        # Prepare records
+        # Detect End Date column for multi-day prorating
+        end_date_col = next((c for c in ['End Date', 'end_date'] if c in df.columns), None)
+
+        # Prepare records — prorate multi-day rows into one row per day
         records = []
         for _, row in df.iterrows():
-            # Parse date
-            report_date = pd.to_datetime(row[date_col], errors='coerce')
-            if pd.isna(report_date):
+            # Parse start date
+            start_date = pd.to_datetime(row[date_col], errors='coerce')
+            if pd.isna(start_date):
                 continue
-            
-            records.append((
-                client_id,
-                report_date.date().isoformat(),
-                str(row[camp_col]).lower().strip() if pd.notna(row[camp_col]) else '',
-                str(row[ag_col]).lower().strip() if pd.notna(row[ag_col]) else '',
-                str(row[targeting_col]).lower().strip() if targeting_col and pd.notna(row.get(targeting_col)) else None,
-                str(row[cst_col]).lower().strip() if cst_col and pd.notna(row.get(cst_col)) else None,
-                str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None,
-                int(row.get('Impressions', 0) or 0),
-                int(row.get('Clicks', 0) or 0),
-                float(row.get('Spend', 0) or 0),
-                float(row.get('Sales', 0) or 0),
-                int(row.get('Orders', 0) or 0)
-            ))
+
+            # Parse end date if available
+            end_date = pd.to_datetime(row[end_date_col], errors='coerce') if end_date_col else pd.NaT
+            if pd.isna(end_date) or end_date < start_date:
+                end_date = start_date
+
+            # Build list of dates this row covers
+            num_days = (end_date.date() - start_date.date()).days + 1
+            date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
+
+            # Prorated numeric values (divide evenly across days)
+            impressions_total = int(row.get('Impressions', 0) or 0)
+            clicks_total      = int(row.get('Clicks', 0) or 0)
+            spend_total       = float(row.get('Spend', 0) or 0)
+            sales_total       = float(row.get('Sales', 0) or 0)
+            orders_total      = int(row.get('Orders', 0) or 0)
+
+            camp  = str(row[camp_col]).lower().strip() if pd.notna(row[camp_col]) else ''
+            ag    = str(row[ag_col]).lower().strip() if pd.notna(row[ag_col]) else ''
+            tgt   = str(row[targeting_col]).lower().strip() if targeting_col and pd.notna(row.get(targeting_col)) else None
+            cst   = str(row[cst_col]).lower().strip() if cst_col and pd.notna(row.get(cst_col)) else None
+            mt    = str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None
+
+            for d in date_range:
+                records.append((
+                    client_id,
+                    d.date().isoformat(),
+                    camp, ag, tgt, cst, mt,
+                    round(impressions_total / num_days),
+                    round(clicks_total / num_days),
+                    round(spend_total / num_days, 4),
+                    round(sales_total / num_days, 4),
+                    round(orders_total / num_days),
+                ))
         
         if not records:
             return 0
