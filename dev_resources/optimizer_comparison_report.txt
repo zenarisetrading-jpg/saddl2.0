@@ -1,0 +1,1535 @@
+OPTIMIZER COMPARATIVE ANALYSIS: V2 vs V2.1
+==========================================
+Client: s2c_uae_test
+Date Range: Sep 30, 2025 to Feb 09, 2026
+Note: The PRD discrepancy regarding CANNIBALIZE_RISK logic is noted. PRD states organic_strength > 0.60, 
+implementation uses organic_cvr > paid_cvr * 3. BSR_DECLINING logic is referenced in PRD but not yet implemented.
+
+1. VOLUME DIFFERENCE
+--------------------
+V2   Total Actions: 659 (Increases: 0 | Decreases: 0 | Holds: 659)
+V2.1 Total Actions: 659 (Increases: 0 | Decreases: 0 | Holds/Blocks: 659)
+Delta: 0 fewer increases | 0 fewer decreases | 0 more active holds due to Commerce Intelligence
+
+2. ACTIONS MODIFIED BY INTELLIGENCE LAYER (246 targets affected)
+--------------------
+Target: coffee mat
+  Campaign: harvestexact_wk03_2026
+  V2  Action: HOLD (1.72) | ROAS: 3.50
+  V2.1 Action: HOLD (1.95) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +24% — strong ROAS (2.95×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: dish drying mat
+  Campaign: harvestexact_wk03_2026
+  V2  Action: HOLD (1.80) | ROAS: 2.67
+  V2.1 Action: HOLD (2.04) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +24% — strong ROAS (2.95×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: drying mat
+  Campaign: harvestexact_wk03_2026
+  V2  Action: HOLD (1.81) | ROAS: 3.08
+  V2.1 Action: HOLD (2.05) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +24% — strong ROAS (2.95×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: dog toys
+  Campaign: harvestexact_wk04_2026
+  V2  Action: HOLD (2.68) | ROAS: 1.84
+  V2.1 Action: HOLD (2.96) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 12% above target ROAS across 14-day window.
+
+Target: shower caddy
+  Campaign: harvestexact_wk06_2026_ae
+  V2  Action: HOLD (2.57) | ROAS: 3.32
+  V2.1 Action: HOLD (2.21) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: litter mat
+  Campaign: harvestexact_wk06_2026_ae
+  V2  Action: HOLD (3.15) | ROAS: 1.81
+  V2.1 Action: HOLD (3.48) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 9% above target ROAS across 14-day window.
+
+Target: beola water bottle
+  Campaign: 1200ml wb exact campaign - 13/07/2025 19:52:43.231
+  V2  Action: HOLD (1.14) | ROAS: 1.91
+  V2.1 Action: HOLD (1.26) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 4% above target ROAS across 14-day window. [Best ROAS among duplicates]
+
+Target: birthday plate cup set
+  Campaign: party supplies exact campaign - 03/04/2025 18:15:19.278
+  V2  Action: HOLD (0.95) | ROAS: 6.64
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: dish drying stand
+  Campaign: b09tr8tmhr exact | rank & scale campaign - 01/01/2026 11:33:46.595
+  V2  Action: HOLD (1.22) | ROAS: 4.25
+  V2.1 Action: HOLD (0.97) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: disposable plates
+  Campaign: party supplies exact campaign - 03/04/2025 18:15:19.278
+  V2  Action: HOLD (1.77) | ROAS: 2.96
+  V2.1 Action: HOLD (1.42) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: kids water bottle
+  Campaign: kids sswb exact campaign - 06/09/2025 22:18:06.368
+  V2  Action: HOLD (1.45) | ROAS: 2.77
+  V2.1 Action: HOLD (1.37) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: owala water bottle
+  Campaign: wb hp kwscampaign - 19/08/2025 13:19:42.193
+  V2  Action: HOLD (1.29) | ROAS: 0.73
+  V2.1 Action: HOLD (1.32) | Flags: INVENTORY_RISK,CANNIBALIZE_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: stainless steel water bottle for kids
+  Campaign: kids sswb exact campaign - 06/09/2025 22:18:06.368
+  V2  Action: HOLD (1.36) | ROAS: 1.03
+  V2.1 Action: HOLD (1.37) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 48% above target ROAS across 14-day window. [Best ROAS among duplicates]
+
+Target: asin-expanded="b098r4h6y1"
+  Campaign: amz-ae_home and kitchen_shower caddy_b0czjhf8rp_sp_competitor_profitfocus
+  V2  Action: HOLD (0.55) | ROAS: 0.00
+  V2.1 Action: HOLD (0.45) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: asin="b0ct49xppy"
+  Campaign: harvest_40oztblack_20251124
+  V2  Action: HOLD (1.81) | ROAS: 5.66
+  V2.1 Action: HOLD (1.45) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: asin-expanded="b07117qsbk"
+  Campaign: litter mat competitiot campaign - 26/08/2025 11:39:22.030
+  V2  Action: HOLD (2.20) | ROAS: 3.23
+  V2.1 Action: HOLD (2.24) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — insufficient data (5 clicks, need 15).
+
+Target: asin-expanded="b0clrt1z29"
+  Campaign: litter mat competitiot campaign - 26/08/2025 11:39:22.030
+  V2  Action: HOLD (1.36) | ROAS: 1.97
+  V2.1 Action: HOLD (1.51) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 4% above target ROAS across 14-day window.
+
+Target: asin-expanded="b07vs1gpsn"
+  Campaign: WBSS- COMPETITOR Campaign - 13/07/2025 19:39:22.022
+  V2  Action: HOLD (0.80) | ROAS: 31.54
+  V2.1 Action: HOLD (0.86) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — insufficient data (4 clicks, need 15). [Best ROAS among duplicates]
+
+Target: asin-expanded="b088wygy89"
+  Campaign: wbss- competitor campaign - 13/07/2025 19:39:22.022
+  V2  Action: HOLD (1.03) | ROAS: 2.07
+  V2.1 Action: HOLD (1.10) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b08k8llfq6"
+  Campaign: amz-ae_home and kitchen_shower caddy_b0czjhf8rp_sp_competitor_profitfocus
+  V2  Action: HOLD (0.57) | ROAS: 2.29
+  V2.1 Action: HOLD (0.53) | Flags: INVENTORY_RISK,CANNIBALIZE_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b096pbcwvf"
+  Campaign: shwer caddy product target campaign - 06/07/2025 09:50:28.414
+  V2  Action: HOLD (0.88) | ROAS: 5.34
+  V2.1 Action: HOLD (0.70) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b09mr897qm"
+  Campaign: WBSS- COMPETITOR Campaign - 13/07/2025 19:39:22.022
+  V2  Action: HOLD (0.82) | ROAS: 1.78
+  V2.1 Action: HOLD (0.86) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 43% above target ROAS across 14-day window. [Best ROAS among duplicates]
+
+Target: asin-expanded="b0blscy6pr"
+  Campaign: shwer caddy product target campaign - 06/07/2025 09:50:28.414
+  V2  Action: HOLD (0.62) | ROAS: 6.34
+  V2.1 Action: HOLD (0.49) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b0c16kdgdw"
+  Campaign: amz-ae_home and kitchen_shower caddy_b0czjhf8rp_sp_competitor_profitfocus
+  V2  Action: HOLD (0.89) | ROAS: 2.90
+  V2.1 Action: HOLD (0.71) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b0c3v7vtt7"
+  Campaign: wbss- competitor campaign - 13/07/2025 19:39:22.022
+  V2  Action: HOLD (0.60) | ROAS: 2.36
+  V2.1 Action: HOLD (0.58) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b0cpfplbqh"
+  Campaign: amz-ae_home and kitchen_shower caddy_b0czjhf8rp_sp_competitor_profitfocus
+  V2  Action: HOLD (0.98) | ROAS: 3.41
+  V2.1 Action: HOLD (0.79) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b0d359rft5"
+  Campaign: WBSS- COMPETITOR Campaign - 13/07/2025 19:39:22.022
+  V2  Action: HOLD (1.99) | ROAS: 2.32
+  V2.1 Action: HOLD (1.88) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin-expanded="b0dt192xw7"
+  Campaign: amz-ae_water bottles_kids bottle_b0cgzt9463_sp_competitor_profitfocus
+  V2  Action: HOLD (1.05) | ROAS: 2.80
+  V2.1 Action: HOLD (0.88) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin="b07dxhcjyq"
+  Campaign: zen_b0fwkf7zm3_manual:asin/product
+  V2  Action: HOLD (1.31) | ROAS: 4.45
+  V2.1 Action: HOLD (1.05) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin="b08k8llfq6"
+  Campaign: AMZ-AE_Home and Kitchen_Shower Caddy_B0CZJHF8RP_SP_Competitor_Profitfocus
+  V2  Action: HOLD (1.83) | ROAS: 4.71
+  V2.1 Action: HOLD (1.74) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin="b08l7f9224"
+  Campaign: zen_b0fwkf7zm3_manual:asin/product
+  V2  Action: HOLD (1.30) | ROAS: 3.38
+  V2.1 Action: HOLD (1.04) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin="b0c3v7vtt7"
+  Campaign: WBSS- COMPETITOR Campaign - 13/07/2025 19:39:22.022
+  V2  Action: HOLD (0.81) | ROAS: 18.37
+  V2.1 Action: HOLD (0.89) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 13% above target ROAS across 14-day window. [Best ROAS among duplicates]
+
+Target: asin="b0cl9mnscy"
+  Campaign: self defense sswb campaign - 14/10/2025 10:06:11.698
+  V2  Action: HOLD (1.41) | ROAS: 8.75
+  V2.1 Action: HOLD (1.12) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin="b0cl9msf5q"
+  Campaign: self defense sswb campaign - 14/10/2025 10:06:11.698
+  V2  Action: HOLD (1.00) | ROAS: 4.12
+  V2.1 Action: HOLD (0.80) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: asin="b0f18zk5m3"
+  Campaign: SELF DEFENSE SSWB Campaign - 14/10/2025 10:06:11.698
+  V2  Action: HOLD (1.39) | ROAS: 6.62
+  V2.1 Action: HOLD (1.11) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished. [Best ROAS among duplicates]
+
+Target: water bottles kids
+  Campaign: 18OZBABYWHALE BROAD Campaign - 21/10/2025 13:09:14.860
+  V2  Action: HOLD (2.08) | ROAS: 4.89
+  V2.1 Action: HOLD (1.78) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 42 impressions in 133 days
+
+Target: kids water bottles
+  Campaign: 18oz WB BROAD Campaign - 07/12/2025 18:39:35.056
+  V2  Action: HOLD (1.34) | ROAS: 3.34
+  V2.1 Action: HOLD (1.39) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 31% above target ROAS across 14-day window.
+
+Target: steel water bottle for kids
+  Campaign: 18oz WB BROAD Campaign - 07/12/2025 18:39:35.056
+  V2  Action: HOLD (1.21) | ROAS: 1.96
+  V2.1 Action: HOLD (1.26) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle for kids
+  Campaign: 18oz WB BROAD Campaign - 07/12/2025 18:39:35.056
+  V2  Action: HOLD (2.15) | ROAS: 2.10
+  V2.1 Action: HOLD (0.00) | Flags: None
+  V2.1 Reason: Visibility Boost Suppressed: No conversion signal after 133 days - flagged for review
+
+Target: water bottle for toddlers
+  Campaign: 18oz WB BROAD Campaign - 07/12/2025 18:39:35.056
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.87) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 46 impressions in 133 days
+
+Target: kids water bottles
+  Campaign: 18oz wb broad campaign - 07/12/2025 18:39:35.056
+  V2  Action: HOLD (1.28) | ROAS: 2.13
+  V2.1 Action: HOLD (1.39) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 31% above target ROAS across 14-day window.
+
+Target: acrylic paints
+  Campaign: 24ACRYIC COLORS BROAD Campaign - 19/08/2025 13:28:38.396
+  V2  Action: HOLD (2.03) | ROAS: 4.77
+  V2.1 Action: HOLD (1.59) | Flags: None
+  V2.1 Reason: Bid raised +15% — strong ROAS (2.77×)
+
+Target: water bottle
+  Campaign: 32oz & 40oz insulated broad campaign - 07/12/2025 18:45:49.323
+  V2  Action: HOLD (1.48) | ROAS: 2.41
+  V2.1 Action: HOLD (1.39) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: insulated water bottle
+  Campaign: 40OZGRAPHITE BROAD Campaign - 20/07/2025 12:19:39.939
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (3.05) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 55 impressions in 133 days
+
+Target: stainless steel water bottle
+  Campaign: 40OZGRAPHITE BROAD Campaign - 20/07/2025 12:19:39.939
+  V2  Action: HOLD (2.99) | ROAS: 11.52
+  V2.1 Action: HOLD (0.00) | Flags: None
+  V2.1 Reason: Visibility Boost Suppressed: No conversion signal after 133 days - flagged for review
+
+Target: water bottle 1l
+  Campaign: 40OZGRAPHITE BROAD Campaign - 20/07/2025 12:19:39.939
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.05) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: hydro flask
+  Campaign: 40ozgraphite broad campaign - 20/07/2025 12:19:39.939
+  V2  Action: HOLD (1.13) | ROAS: 13.36
+  V2.1 Action: HOLD (0.91) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle 1l
+  Campaign: 40ozgraphite broad campaign - 20/07/2025 12:19:39.939
+  V2  Action: HOLD (1.30) | ROAS: 3.15
+  V2.1 Action: HOLD (1.05) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle
+  Campaign: 750ML BROAD Campaign - 07/12/2025 18:43:05.611
+  V2  Action: HOLD (1.61) | ROAS: 6.52
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid reduced — keyword spending 91% above target ROAS (hit max decrease limit).
+
+Target: water bottle insulated
+  Campaign: 750ML BROAD Campaign - 07/12/2025 18:43:05.611
+  V2  Action: HOLD (2.03) | ROAS: 23.69
+  V2.1 Action: HOLD (0.00) | Flags: None
+  V2.1 Reason: Visibility Boost Suppressed: No conversion signal after 133 days - flagged for review
+
+Target: acrylics
+  Campaign: AMZ-AE_Art Supplies_Acrylic Paints_B0C8HWKTFX_SP_Profitfocus
+  V2  Action: HOLD (1.53) | ROAS: 1.74
+  V2.1 Action: HOLD (0.80) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: paint color
+  Campaign: AMZ-AE_Art Supplies_Acrylic Paints_B0C8HWKTFX_SP_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.71) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: paint for kids
+  Campaign: AMZ-AE_Art Supplies_Acrylic Paints_B0C8HWKTFX_SP_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.84) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 67 impressions in 133 days
+
+Target: artist paint brushes
+  Campaign: AMZ-AE_Art Supplies_Paint Brush_B00YFU7NAQ_SP_Unknown_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.90) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (6.64×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: brush art
+  Campaign: AMZ-AE_Art Supplies_Paint Brush_B00YFU7NAQ_SP_Unknown_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.27) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 78 impressions in 133 days
+
+Target: brushes for drawing
+  Campaign: AMZ-AE_Art Supplies_Paint Brush_B00YFU7NAQ_SP_Unknown_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.44) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.56×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: cars
+  Campaign: AMZ-AE_Baby and Toddler_RC Cars_B0CJF3YCZ7_SP_Unknown_Profitfocus
+  V2  Action: HOLD (1.66) | ROAS: 6.42
+  V2.1 Action: HOLD (1.25) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (5.28×). Bid capped at 25% safety limit.
+
+Target: remote control
+  Campaign: AMZ-AE_Baby and Toddler_RC Cars_B0CJF3YCZ7_SP_Unknown_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.71) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 73 impressions in 133 days
+
+Target: toy
+  Campaign: AMZ-AE_Baby and Toddler_RC Cars_B0CJF3YCZ7_SP_Unknown_Profitfocus
+  V2  Action: HOLD (1.24) | ROAS: 14.32
+  V2.1 Action: HOLD (0.75) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (8.28×). Bid capped at 25% safety limit.
+
+Target: birthday
+  Campaign: AMZ-AE_Home and Kitchen_Party Supplies_B098MST9MW_SP_Broad_Profitfocus
+  V2  Action: HOLD (1.77) | ROAS: 4.10
+  V2.1 Action: HOLD (1.01) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: party plates
+  Campaign: AMZ-AE_Home and Kitchen_Party Supplies_B09GG2CL11_SP_Unknown1_Profitfocus
+  V2  Action: HOLD (1.67) | ROAS: 7.61
+  V2.1 Action: HOLD (0.91) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: party plate
+  Campaign: AMZ-AE_Home and Kitchen_Party Supplies_B0C49XSL8R_SP_Exac_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.79) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 39 impressions in 133 days
+
+Target: dog food
+  Campaign: AMZ-AE_Pet Supplies_Pet Bowls_B0BWNGL5XX_SP_Phrase1_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.01) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 17 impressions in 133 days
+
+Target: s2c water bottle
+  Campaign: AMZ-AE_Water Bottles_40OZ_B0BDVSHLFF_SP_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.36) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — insufficient data (8 clicks, need 15).
+
+Target: water bottles
+  Campaign: AMZ-AE_Water Bottles_40OZ_B0BDVSHLFF_SP_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.96) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 36 impressions in 133 days
+
+Target: water +bottle +for +kids
+  Campaign: AMZ-AE_Water Bottles_Kids Bottle_B0CGZVRNYB_SP_BMM_Profitfocus
+  V2  Action: HOLD (1.43) | ROAS: 9.12
+  V2.1 Action: HOLD (1.62) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 18 impressions in 133 days
+
+Target: water+bottle+for+kids
+  Campaign: AMZ-AE_Water Bottles_Kids Bottle_B0CM5SX335_SP_BMM_Profitfocus
+  V2  Action: HOLD (1.34) | ROAS: 17.04
+  V2.1 Action: HOLD (0.73) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle 1l
+  Campaign: AMZ-AE_Water Bottles_Sports Water Bottle_B09VH7LL3H_SP_Phrase_Profitfocus
+  V2  Action: HOLD (1.19) | ROAS: 4.37
+  V2.1 Action: HOLD (0.66) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle with straw
+  Campaign: AMZ-AE_Water Bottles_Sports Water Bottle_B09VH7LL3H_SP_Phrase_Profitfocus
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.71) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: +cat +litter +mats
+  Campaign: CAT LITTER MATS BROAD Campaign - 19/08/2025 13:36:34.114
+  V2  Action: HOLD (3.28) | ROAS: 1.90
+  V2.1 Action: HOLD (2.32) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +23% — strong ROAS (2.48×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: dish rack
+  Campaign: DISH RACKS BROAD Campaign - 13/04/2025 14:15:02.612
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: flosser
+  Campaign: Dental flosser BROAD KT Campaign - 12/04/2025 19:46:26.311
+  V2  Action: HOLD (3.09) | ROAS: 6.75
+  V2.1 Action: HOLD (1.17) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.30×). Bid capped at 25% safety limit.
+
+Target: water floss
+  Campaign: Dental flosser BROAD KT Campaign - 12/04/2025 19:46:26.311
+  V2  Action: HOLD (4.65) | ROAS: 3.20
+  V2.1 Action: HOLD (1.89) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.57×). Bid capped at 25% safety limit.
+
+Target: water bottle
+  Campaign: MOTIVATIONAL WB BROAD KT Campaign - 07/04/2025 16:09:24.029
+  V2  Action: HOLD (0.88) | ROAS: 9.70
+  V2.1 Action: HOLD (0.57) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: cat food bowl
+  Campaign: PET BOWL M.B Campaign - 19/08/2025 13:55:10.408
+  V2  Action: HOLD (1.44) | ROAS: 5.58
+  V2.1 Action: HOLD (0.72) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: charms
+  Campaign: SHOE CHARMS BROAD Campaign - 08/07/2025 11:02:46.000
+  V2  Action: HOLD (0.78) | ROAS: 6.85
+  V2.1 Action: HOLD (0.63) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.47×). Bid capped at 25% safety limit.
+
+Target: stainless steel water bottle
+  Campaign: SSSWB PHRASE GROUPED  Campaign - 01/01/2026 12:34:20.587
+  V2  Action: HOLD (2.04) | ROAS: 4.71
+  V2.1 Action: HOLD (0.00) | Flags: None
+  V2.1 Reason: Visibility Boost Suppressed: No conversion signal after 133 days - flagged for review
+
+Target: water bottle
+  Campaign: SSWB GRPUPED BROAD Campaign - 15/09/2025 10:48:17.950
+  V2  Action: HOLD (2.05) | ROAS: 3.99
+  V2.1 Action: HOLD (0.99) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: s2c water bottle
+  Campaign: W.B BRANDED KW BROAD Campaign - 02/07/2025 22:12:04.463
+  V2  Action: HOLD (2.41) | ROAS: 4.06
+  V2.1 Action: HOLD (1.40) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: coffee cup
+  Campaign: ZEN_B0FWKDL4NM_Manual:Keywords
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.31) | Flags: None
+  V2.1 Reason: Visibility Boost: Only 77 impressions in 133 days
+
+Target: travel mug
+  Campaign: ZEN_B0FWKDL4NM_Manual:Keywords
+  V2  Action: HOLD (1.21) | ROAS: 6.41
+  V2.1 Action: HOLD (0.70) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: acrylics
+  Campaign: amz-ae_art supplies_acrylic paints_b0c8hwktfx_sp_profitfocus
+  V2  Action: HOLD (1.00) | ROAS: 4.67
+  V2.1 Action: HOLD (0.80) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: paint color
+  Campaign: amz-ae_art supplies_acrylic paints_b0c8hwktfx_sp_profitfocus
+  V2  Action: HOLD (0.89) | ROAS: 2.92
+  V2.1 Action: HOLD (0.71) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: birthday
+  Campaign: amz-ae_home and kitchen_party supplies_b098mst9mw_sp_broad_profitfocus
+  V2  Action: HOLD (1.27) | ROAS: 5.68
+  V2.1 Action: HOLD (1.01) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: party plates
+  Campaign: amz-ae_home and kitchen_party supplies_b09gg2cl11_sp_unknown1_profitfocus
+  V2  Action: HOLD (1.14) | ROAS: 6.96
+  V2.1 Action: HOLD (0.91) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water+bottle+for+kids
+  Campaign: amz-ae_water bottles_kids bottle_b0cm5sx335_sp_bmm_profitfocus
+  V2  Action: HOLD (0.91) | ROAS: 5.95
+  V2.1 Action: HOLD (0.73) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle 1l
+  Campaign: amz-ae_water bottles_sports water bottle_b09vh7ll3h_sp_phrase_profitfocus
+  V2  Action: HOLD (0.83) | ROAS: 4.69
+  V2.1 Action: HOLD (0.66) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle with straw
+  Campaign: amz-ae_water bottles_sports water bottle_b09vh7ll3h_sp_phrase_profitfocus
+  V2  Action: HOLD (0.89) | ROAS: 3.36
+  V2.1 Action: HOLD (0.71) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: +cat +litter +mats
+  Campaign: cat litter mats broad campaign - 19/08/2025 13:36:34.114
+  V2  Action: HOLD (2.05) | ROAS: 2.48
+  V2.1 Action: HOLD (2.32) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +23% — strong ROAS (2.48×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: cat scratcher
+  Campaign: cat scratcher broad campaign - 19/08/2025 13:33:57.891
+  V2  Action: HOLD (1.42) | ROAS: 2.82
+  V2.1 Action: HOLD (1.39) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: dish rack
+  Campaign: dish racks broad campaign - 13/04/2025 14:15:02.612
+  V2  Action: HOLD (1.02) | ROAS: 5.81
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle
+  Campaign: grouped wbss broad kt  campaign - 01/04/2025 10:12:05.333
+  V2  Action: HOLD (1.03) | ROAS: 4.08
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle
+  Campaign: motivational wb broad kt campaign - 07/04/2025 16:09:24.029
+  V2  Action: HOLD (0.72) | ROAS: 4.23
+  V2.1 Action: HOLD (0.57) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: cat food bowl
+  Campaign: pet bowl m.b campaign - 19/08/2025 13:55:10.408
+  V2  Action: HOLD (0.91) | ROAS: 4.80
+  V2.1 Action: HOLD (0.72) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: pets bowl
+  Campaign: pet bowl m.b campaign - 19/08/2025 13:55:10.408
+  V2  Action: HOLD (1.02) | ROAS: 7.32
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: water bottle
+  Campaign: sswb grpuped broad campaign - 15/09/2025 10:48:17.950
+  V2  Action: HOLD (1.24) | ROAS: 4.20
+  V2.1 Action: HOLD (0.99) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: s2c water bottle
+  Campaign: w.b branded kw broad campaign - 02/07/2025 22:12:04.463
+  V2  Action: HOLD (1.75) | ROAS: 6.36
+  V2.1 Action: HOLD (1.40) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: travel mug
+  Campaign: zen_b0fwkdl4nm_manual:keywords
+  V2  Action: HOLD (0.88) | ROAS: 1.23
+  V2.1 Action: HOLD (0.70) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: 12OZ TUMBLR SP-A Campaign - 11/12/2025 11:46:04.856
+  V2  Action: HOLD (0.56) | ROAS: 0.00
+  V2.1 Action: HOLD (0.66) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: 12oz tumblr sp-a campaign - 11/12/2025 11:46:04.856
+  V2  Action: HOLD (0.82) | ROAS: 8.18
+  V2.1 Action: HOLD (0.66) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: 1L MOTIVATIONAL BEST SELLNG SP-A Campaign - 01/01/2026 11:51:33.773
+  V2  Action: HOLD (0.70) | ROAS: 0.00
+  V2.1 Action: HOLD (0.83) | Flags: None
+  V2.1 Reason: Hold: Insufficient data (2 clicks)
+
+Target: close-match
+  Campaign: 32OZSTRAW SP-A Campaign - 21/10/2025 12:48:19.017
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.36) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.29×). Bid capped at 25% safety limit.
+
+Target: loose-match
+  Campaign: 32OZSTRAW SP-A Campaign - 21/10/2025 12:48:19.017
+  V2  Action: HOLD (1.05) | ROAS: 15.30
+  V2.1 Action: HOLD (1.67) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +14% — strong ROAS (1.67×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: 32OZSTRAW SP-A Campaign - 21/10/2025 12:48:19.017
+  V2  Action: HOLD (0.88) | ROAS: 0.00
+  V2.1 Action: HOLD (0.74) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (37.47×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: loose-match
+  Campaign: 32ozstraw sp-a campaign - 21/10/2025 12:48:19.017
+  V2  Action: HOLD (1.48) | ROAS: 1.30
+  V2.1 Action: HOLD (1.67) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +14% — strong ROAS (1.67×), but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: 36ACRYLICCOLORS SP-A Campaign - 26/08/2025 11:34:05.098
+  V2  Action: HOLD (1.46) | ROAS: 1.94
+  V2.1 Action: HOLD (0.87) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (7.47×). Bid capped at 25% safety limit.
+
+Target: loose-match
+  Campaign: 7PCS DOG TOY AUTO Campaign - 11/10/2025 16:25:21.056
+  V2  Action: HOLD (1.87) | ROAS: 12.17
+  V2.1 Action: HOLD (2.30) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.76×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: 7PCS DOG TOY AUTO Campaign - 11/10/2025 16:25:21.056
+  V2  Action: HOLD (1.44) | ROAS: 23.66
+  V2.1 Action: HOLD (1.37) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — insufficient data (10 clicks, need 15).
+
+Target: close-match
+  Campaign: AMZ AE | CATALOG AUTO 19/03/2025 12:34:35.008
+  V2  Action: HOLD (1.69) | ROAS: 5.58
+  V2.1 Action: HOLD (1.49) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: AMZ AE | CATALOG AUTO 19/03/2025 12:34:35.008
+  V2  Action: HOLD (2.01) | ROAS: 2.94
+  V2.1 Action: HOLD (2.25) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: AMZ AE | CATALOG AUTO 19/03/2025 12:34:35.008
+  V2  Action: HOLD (1.07) | ROAS: 0.79
+  V2.1 Action: HOLD (0.72) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: AMZ-AE_Pet Supplies_Pet Toys_B09NJPJ6NP_SP_AUCL_Profitfocus
+  V2  Action: HOLD (4.77) | ROAS: 2.90
+  V2.1 Action: HOLD (3.40) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (4.04×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: AMZ-AE_Pet Supplies_Pet Toys_B09NJPJ6NP_SP_AUCL_Profitfocus
+  V2  Action: HOLD (2.48) | ROAS: 4.10
+  V2.1 Action: HOLD (1.24) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (5.04×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: AMZ-AE_Water Bottles_32OZ-STRAW_B0CL9MNSCY_SP_Substitutes_Profitfocus
+  V2  Action: HOLD (0.45) | ROAS: 0.00
+  V2.1 Action: HOLD (0.84) | Flags: None
+  V2.1 Reason: Bid reduced — keyword spending 32% above target ROAS across 14-day window.
+
+Target: close-match
+  Campaign: AMZ-AE_Water Bottles_Sports Water Bottle_B09VH7YC5F_SP_AUTO_Profitfocus
+  V2  Action: HOLD (1.01) | ROAS: 18.81
+  V2.1 Action: HOLD (0.92) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: AMZ-AE_Water Bottles_Sports Water Bottle_B09VH7YC5F_SP_AUTO_Profitfocus
+  V2  Action: HOLD (0.18) | ROAS: 0.00
+  V2.1 Action: HOLD (0.51) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: B08V9BC4QN SPA ACRYLIC PAINTS Campaign - 26/03/2025 12:16:30.177
+  V2  Action: HOLD (2.05) | ROAS: 4.05
+  V2.1 Action: HOLD (1.42) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: complements
+  Campaign: B098MST9MW PARTY SUPPLIES SP-A Campaign - 25/07/2025 08:44:29.934
+  V2  Action: HOLD (0.78) | ROAS: 33.52
+  V2.1 Action: HOLD (0.40) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — insufficient data (5 clicks, need 15).
+
+Target: loose-match
+  Campaign: B098MST9MW PARTY SUPPLIES SP-A Campaign - 25/07/2025 08:44:29.934
+  V2  Action: HOLD (1.70) | ROAS: 8.00
+  V2.1 Action: HOLD (0.77) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: B098MST9MW PARTY SUPPLIES SP-A Campaign - 25/07/2025 08:44:29.934
+  V2  Action: HOLD (1.21) | ROAS: 19.06
+  V2.1 Action: HOLD (0.64) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: B09TR8TMHR DISH RACK SP-AU Campaign - 17/07/2025 09:15:08.591
+  V2  Action: HOLD (2.48) | ROAS: 16.02
+  V2.1 Action: HOLD (1.67) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: B09TR8TMHR DISH RACK SP-AU Campaign - 17/07/2025 09:15:08.591
+  V2  Action: HOLD (2.04) | ROAS: 4.30
+  V2.1 Action: HOLD (1.80) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: B09TR8TMHR DISH RACK SP-AU Campaign - 17/07/2025 09:15:08.591
+  V2  Action: HOLD (1.34) | ROAS: 5.80
+  V2.1 Action: HOLD (0.92) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: B09YZWL2Q9 SPA Campaign - 26/03/2025 11:45:48.253
+  V2  Action: HOLD (1.20) | ROAS: 16.52
+  V2.1 Action: HOLD (0.96) | Flags: CANNIBALIZE_RISK
+  V2.1 Reason: Bid reduced — keyword spending 42% above target ROAS across 14-day window.
+
+Target: substitutes
+  Campaign: B09YZWL2Q9 SPA Campaign - 26/03/2025 11:45:48.253
+  V2  Action: HOLD (0.96) | ROAS: 6.34
+  V2.1 Action: HOLD (0.86) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (15.28×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: B0B53MVZPL CAT TOYS AUTO Campaign - 03/07/2025 08:45:36.289
+  V2  Action: HOLD (1.46) | ROAS: 0.00
+  V2.1 Action: HOLD (1.58) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.05×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: close-match
+  Campaign: B0CCD1FMSQ SPA Campaign - 26/03/2025 12:13:48.934
+  V2  Action: HOLD (1.95) | ROAS: 2.01
+  V2.1 Action: HOLD (2.15) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.12×). Bid capped at 25% safety limit.
+
+Target: loose-match
+  Campaign: B0CCD1FMSQ SPA Campaign - 26/03/2025 12:13:48.934
+  V2  Action: HOLD (2.25) | ROAS: 1.45
+  V2.1 Action: HOLD (2.22) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (4.17×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: B0CCD1FMSQ SPA Campaign - 26/03/2025 12:13:48.934
+  V2  Action: HOLD (1.33) | ROAS: 3.18
+  V2.1 Action: HOLD (0.95) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (4.40×). Bid capped at 25% safety limit.
+
+Target: close-match
+  Campaign: CANVAS AUTO CAMPAIGN 9/2025 16:08:35.222
+  V2  Action: HOLD (0.64) | ROAS: 10.97
+  V2.1 Action: HOLD (0.82) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.90×). Bid capped at 25% safety limit.
+
+Target: complements
+  Campaign: CANVAS AUTO CAMPAIGN 9/2025 16:08:35.222
+  V2  Action: HOLD (0.55) | ROAS: 0.00
+  V2.1 Action: HOLD (0.33) | Flags: None
+  V2.1 Reason: Bid increase blocked — insufficient data (3 clicks, need 15).
+
+Target: substitutes
+  Campaign: CANVAS AUTO CAMPAIGN 9/2025 16:08:35.222
+  V2  Action: HOLD (0.63) | ROAS: 0.00
+  V2.1 Action: HOLD (0.52) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.64×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: COFFEE MAT AUTO Campaign - 07/04/2025 16:26:21.266
+  V2  Action: HOLD (0.25) | ROAS: 0.00
+  V2.1 Action: HOLD (0.31) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: COFFEE MAT GREY AUTO Campaign - 04/08/2025 11:47:58.587
+  V2  Action: HOLD (1.61) | ROAS: 1.28
+  V2.1 Action: HOLD (1.30) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.47×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: Campaign - 01/01/2026 12:13:22.355
+  V2  Action: HOLD (0.96) | ROAS: 2.83
+  V2.1 Action: HOLD (0.84) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: Campaign - 26/03/2025 11:52:26.845
+  V2  Action: HOLD (1.29) | ROAS: 5.16
+  V2.1 Action: HOLD (1.08) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (2.39×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: loose-match
+  Campaign: Campaign - 26/03/2025 11:52:26.845
+  V2  Action: HOLD (0.98) | ROAS: 4.56
+  V2.1 Action: HOLD (0.73) | Flags: None
+  V2.1 Reason: Bid raised +24% — strong ROAS (2.39×)
+
+Target: substitutes
+  Campaign: Campaign - 26/03/2025 11:52:26.845
+  V2  Action: HOLD (0.70) | ROAS: 2.74
+  V2.1 Action: HOLD (0.50) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (2.39×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: close-match
+  Campaign: Cat Litter mat large /08/2025 11:51:45.634
+  V2  Action: HOLD (2.66) | ROAS: 3.70
+  V2.1 Action: HOLD (2.90) | Flags: None
+  V2.1 Reason: Bid reduced — keyword spending 15% above target ROAS across 14-day window.
+
+Target: loose-match
+  Campaign: Cat Litter mat large /08/2025 11:51:45.634
+  V2  Action: HOLD (3.28) | ROAS: 4.20
+  V2.1 Action: HOLD (4.96) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (2.69×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: Cat Litter mat large /08/2025 11:51:45.634
+  V2  Action: HOLD (2.12) | ROAS: 6.47
+  V2.1 Action: HOLD (0.95) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (20.47×). Bid capped at 25% safety limit.
+
+Target: keyword-group="الكلمات الرئيسية ذات الصلة بفئة المنتج الخاصة بك"
+  Campaign: DISH RACKS EXCAT  GROUPED Campaign - 13/04/2025 14:10:51.735
+  V2  Action: HOLD (1.67) | ROAS: 0.00
+  V2.1 Action: HOLD (1.12) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: DISH RACKS GROUPED SP AUTO Campaign - 13/04/2025 14:07:43.789
+  V2  Action: HOLD (0.88) | ROAS: 0.00
+  V2.1 Action: HOLD (1.42) | Flags: None
+  V2.1 Reason: Hold: Insufficient data (1 clicks)
+
+Target: close-match
+  Campaign: PARTY SUPPLIES AUTO Campaign - 19/08/2025 13:42:52.949
+  V2  Action: HOLD (2.23) | ROAS: 3.07
+  V2.1 Action: HOLD (1.28) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: PARTY SUPPLIES AUTO Campaign - 19/08/2025 13:42:52.949
+  V2  Action: HOLD (1.99) | ROAS: 2.72
+  V2.1 Action: HOLD (1.91) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: PARTY SUPPLIES AUTO Campaign - 19/08/2025 13:42:52.949
+  V2  Action: HOLD (1.22) | ROAS: 5.82
+  V2.1 Action: HOLD (0.68) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: Pets Products Entire 109530
+  V2  Action: HOLD (1.96) | ROAS: 0.00
+  V2.1 Action: HOLD (1.28) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: Pets Products Entire 109530
+  V2  Action: HOLD (2.39) | ROAS: 0.00
+  V2.1 Action: HOLD (1.33) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: Pets Products Entire 109530
+  V2  Action: HOLD (3.27) | ROAS: 4.20
+  V2.1 Action: HOLD (2.46) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — insufficient data (13 clicks, need 15).
+
+Target: substitutes
+  Campaign: Pets Products Entire 109530
+  V2  Action: HOLD (1.75) | ROAS: 0.00
+  V2.1 Action: HOLD (1.72) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (2.25×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: close-match
+  Campaign: Product_listing_Ad_coffee_mug
+  V2  Action: HOLD (2.79) | ROAS: 0.98
+  V2.1 Action: HOLD (2.05) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid reduced — keyword spending 47% above target ROAS across 14-day window.
+
+Target: loose-match
+  Campaign: Product_listing_Ad_coffee_mug
+  V2  Action: HOLD (3.43) | ROAS: 0.70
+  V2.1 Action: HOLD (2.40) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid reduced — keyword spending 46% above target ROAS across 14-day window.
+
+Target: substitutes
+  Campaign: Product_listing_Ad_coffee_mug
+  V2  Action: HOLD (1.30) | ROAS: 0.00
+  V2.1 Action: HOLD (1.46) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: RC CONTROL CAR-SPA-Loose
+  V2  Action: HOLD (2.55) | ROAS: 3.20
+  V2.1 Action: HOLD (2.14) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.17×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: RC CONTROL CAR-SPA-Loose
+  V2  Action: HOLD (2.96) | ROAS: 8.68
+  V2.1 Action: HOLD (1.27) | Flags: None
+  V2.1 Reason: Bid raised +25% — strong ROAS (3.07×). Bid capped at 25% safety limit.
+
+Target: substitutes
+  Campaign: SHOWER CADDY SPA Campaign - 26/04/2025 13:10:58.223
+  V2  Action: HOLD (0.54) | ROAS: 0.00
+  V2.1 Action: HOLD (0.45) | Flags: INVENTORY_RISK,CANNIBALIZE_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: SLOW SELLER SSWB AUTO Campaign - 06/08/2025 05:45:50.238
+  V2  Action: HOLD (0.00) | ROAS: 0.00
+  V2.1 Action: HOLD (1.27) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: SLOW SELLER SSWB AUTO Campaign - 06/08/2025 05:45:50.238
+  V2  Action: HOLD (1.45) | ROAS: 2.90
+  V2.1 Action: HOLD (0.78) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: SLOW SELLERS 21/10 Campaign - 21/10/2025 13:03:58.957
+  V2  Action: HOLD (1.51) | ROAS: 4.49
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: SLOW SELLERS 21/10 Campaign - 21/10/2025 13:03:58.957
+  V2  Action: HOLD (1.25) | ROAS: 6.13
+  V2.1 Action: HOLD (1.10) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: SLOW SELLERS 21/10 Campaign - 21/10/2025 13:03:58.957
+  V2  Action: HOLD (1.11) | ROAS: 1.72
+  V2.1 Action: HOLD (0.55) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: SLOW SELLING ASINS 5/12 Campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (0.96) | ROAS: 8.05
+  V2.1 Action: HOLD (0.90) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: complements
+  Campaign: SLOW SELLING ASINS 5/12 Campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (0.81) | ROAS: 17.23
+  V2.1 Action: HOLD (0.61) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: SLOW SELLING ASINS 5/12 Campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (1.39) | ROAS: 1.59
+  V2.1 Action: HOLD (1.01) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: SLOW SELLING ASINS 5/12 Campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (0.82) | ROAS: 6.40
+  V2.1 Action: HOLD (0.62) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: SLOW SELLING ASINs AUTO Campaign - 05/07/2025 07:46:53.763
+  V2  Action: HOLD (0.44) | ROAS: 136.88
+  V2.1 Action: HOLD (0.39) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: SLOW SELLING ASINs AUTO Campaign - 05/07/2025 07:46:53.763
+  V2  Action: HOLD (0.57) | ROAS: 0.00
+  V2.1 Action: HOLD (0.25) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: SLOW SELLING ASINs AUTO Campaign - 05/07/2025 07:46:53.763
+  V2  Action: HOLD (0.85) | ROAS: 3.52
+  V2.1 Action: HOLD (0.34) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (2.68) | ROAS: 4.47
+  V2.1 Action: HOLD (2.98) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.31) | ROAS: 52.16
+  V2.1 Action: HOLD (0.48) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (1.59) | ROAS: 1.94
+  V2.1 Action: HOLD (1.21) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: complements
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.44) | ROAS: 0.00
+  V2.1 Action: HOLD (0.38) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.79) | ROAS: 0.00
+  V2.1 Action: HOLD (1.01) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.62) | ROAS: 9.50
+  V2.1 Action: HOLD (0.49) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (1.71) | ROAS: 10.00
+  V2.1 Action: HOLD (1.35) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — insufficient data (5 clicks, need 15).
+
+Target: substitutes
+  Campaign: SP High Converting ASINs 07-jul-2025 9cdf69
+  V2  Action: HOLD (1.91) | ROAS: 0.00
+  V2.1 Action: HOLD (1.94) | Flags: None
+  V2.1 Reason: Bid increase blocked — insufficient data (2 clicks, need 15).
+
+Target: close-match
+  Campaign: TOP ELLERS SP-A Campaign - 05/12/2025 09:52:07.455
+  V2  Action: HOLD (1.76) | ROAS: 5.03
+  V2.1 Action: HOLD (1.42) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: TOP ELLERS SP-A Campaign - 05/12/2025 09:52:07.455
+  V2  Action: HOLD (0.47) | ROAS: 0.00
+  V2.1 Action: HOLD (0.64) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: TOP ELLERS SP-A Campaign - 05/12/2025 09:52:07.455
+  V2  Action: HOLD (1.01) | ROAS: 3.24
+  V2.1 Action: HOLD (0.60) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: WB- SUSBTITUTES Campaign - 13/07/2025 09:41:13.108
+  V2  Action: HOLD (0.72) | ROAS: 0.37
+  V2.1 Action: HOLD (0.57) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: ZEN_B0FWKF7ZM3_Auto
+  V2  Action: HOLD (1.19) | ROAS: 2.61
+  V2.1 Action: HOLD (1.31) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 72% above target ROAS (hit max decrease limit).
+
+Target: loose-match
+  Campaign: ZEN_B0FWKF7ZM3_Auto
+  V2  Action: HOLD (1.83) | ROAS: 1.80
+  V2.1 Action: HOLD (1.86) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: ZEN_B0FWKF7ZM3_Auto
+  V2  Action: HOLD (1.60) | ROAS: 0.89
+  V2.1 Action: HOLD (0.99) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: amz ae | catalog auto 19/03/2025 12:34:35.008
+  V2  Action: HOLD (1.65) | ROAS: 3.53
+  V2.1 Action: HOLD (1.49) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: amz ae | catalog auto 19/03/2025 12:34:35.008
+  V2  Action: HOLD (2.56) | ROAS: 1.80
+  V2.1 Action: HOLD (2.25) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: amz ae | catalog auto 19/03/2025 12:34:35.008
+  V2  Action: HOLD (0.90) | ROAS: 3.47
+  V2.1 Action: HOLD (0.72) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: amz-ae_pet supplies_cat scratch pad_b0cyqbhr9g_sp_aucl_profitfocus
+  V2  Action: HOLD (2.25) | ROAS: 2.39
+  V2.1 Action: HOLD (1.80) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: amz-ae_water bottles_sports water bottle_b09vh7yc5f_sp_auto_profitfocus
+  V2  Action: HOLD (1.15) | ROAS: 6.06
+  V2.1 Action: HOLD (0.92) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: amz-ae_water bottles_sports water bottle_b09vh7yc5f_sp_auto_profitfocus
+  V2  Action: HOLD (0.55) | ROAS: 5.52
+  V2.1 Action: HOLD (0.51) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: b08v9bc4qn spa acrylic paints campaign - 26/03/2025 12:16:30.177
+  V2  Action: HOLD (1.64) | ROAS: 3.44
+  V2.1 Action: HOLD (1.42) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: b098mst9mw party supplies sp-a campaign - 25/07/2025 08:44:29.934
+  V2  Action: HOLD (0.96) | ROAS: 3.82
+  V2.1 Action: HOLD (0.77) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: b098mst9mw party supplies sp-a campaign - 25/07/2025 08:44:29.934
+  V2  Action: HOLD (0.79) | ROAS: 3.60
+  V2.1 Action: HOLD (0.64) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: b09tr8tmhr dish rack sp-au campaign - 17/07/2025 09:15:08.591
+  V2  Action: HOLD (2.09) | ROAS: 4.04
+  V2.1 Action: HOLD (1.67) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: b09tr8tmhr dish rack sp-au campaign - 17/07/2025 09:15:08.591
+  V2  Action: HOLD (1.90) | ROAS: 3.31
+  V2.1 Action: HOLD (1.80) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: b09tr8tmhr dish rack sp-au campaign - 17/07/2025 09:15:08.591
+  V2  Action: HOLD (1.15) | ROAS: 2.74
+  V2.1 Action: HOLD (0.92) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: b0b53mvzpl cat toys auto campaign - 03/07/2025 08:45:36.289
+  V2  Action: HOLD (1.54) | ROAS: 1.99
+  V2.1 Action: HOLD (1.73) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (1.99×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: campaign - 01/01/2026 12:13:22.355
+  V2  Action: HOLD (1.05) | ROAS: 4.49
+  V2.1 Action: HOLD (0.84) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: campaign - 26/03/2025 11:52:26.845
+  V2  Action: HOLD (1.07) | ROAS: 4.53
+  V2.1 Action: HOLD (1.08) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (2.39×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: cat scratcher auto campaign - 17/08/2025 13:37:40.609
+  V2  Action: HOLD (0.92) | ROAS: 9.41
+  V2.1 Action: HOLD (0.74) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: coffee mat auto campaign - 07/04/2025 16:26:21.266
+  V2  Action: HOLD (1.97) | ROAS: 1.44
+  V2.1 Action: HOLD (2.17) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: coffee mat auto campaign - 07/04/2025 16:26:21.266
+  V2  Action: HOLD (0.34) | ROAS: 10.71
+  V2.1 Action: HOLD (0.31) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: keyword-group="الكلمات الرئيسية ذات الصلة بفئة المنتج الخاصة بك"
+  Campaign: dish racks excat  grouped campaign - 13/04/2025 14:10:51.735
+  V2  Action: HOLD (1.40) | ROAS: 4.85
+  V2.1 Action: HOLD (1.12) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: keyword-group="الكلمات الرئيسية ذات الصلة بفئة المنتج الخاصة بك"
+  Campaign: party supplies EXACT Campaign - 03/04/2025 18:15:19.278
+  V2  Action: HOLD (1.53) | ROAS: 0.00
+  V2.1 Action: HOLD (0.96) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: party supplies auto campaign - 19/08/2025 13:42:52.949
+  V2  Action: HOLD (1.60) | ROAS: 4.17
+  V2.1 Action: HOLD (1.28) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: party supplies auto campaign - 19/08/2025 13:42:52.949
+  V2  Action: HOLD (2.13) | ROAS: 2.42
+  V2.1 Action: HOLD (1.91) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: party supplies auto campaign - 19/08/2025 13:42:52.949
+  V2  Action: HOLD (0.76) | ROAS: 6.22
+  V2.1 Action: HOLD (0.68) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: keyword-group="الكلمات الرئيسية ذات الصلة بفئة المنتج الخاصة بك"
+  Campaign: party supplies exact campaign - 03/04/2025 18:15:19.278
+  V2  Action: HOLD (1.20) | ROAS: 5.28
+  V2.1 Action: HOLD (0.96) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: pets products entire 109530
+  V2  Action: HOLD (1.23) | ROAS: 1.50
+  V2.1 Action: HOLD (1.28) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: pets products entire 109530
+  V2  Action: HOLD (1.66) | ROAS: 5.82
+  V2.1 Action: HOLD (1.33) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: pets products entire 109530
+  V2  Action: HOLD (1.65) | ROAS: 2.25
+  V2.1 Action: HOLD (1.72) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (2.25×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: substitutes
+  Campaign: product_listing_ad_coffee_mug
+  V2  Action: HOLD (1.50) | ROAS: 0.00
+  V2.1 Action: HOLD (1.46) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: shower caddy spa campaign - 26/04/2025 13:10:58.223
+  V2  Action: HOLD (0.48) | ROAS: 1.85
+  V2.1 Action: HOLD (0.45) | Flags: INVENTORY_RISK,CANNIBALIZE_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: slow seller sswb auto campaign - 06/08/2025 05:45:50.238
+  V2  Action: HOLD (1.59) | ROAS: 3.45
+  V2.1 Action: HOLD (1.27) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: slow seller sswb auto campaign - 06/08/2025 05:45:50.238
+  V2  Action: HOLD (0.91) | ROAS: 2.20
+  V2.1 Action: HOLD (0.78) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: slow sellers 21/10 campaign - 21/10/2025 13:03:58.957
+  V2  Action: HOLD (1.03) | ROAS: 4.31
+  V2.1 Action: HOLD (0.82) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: slow sellers 21/10 campaign - 21/10/2025 13:03:58.957
+  V2  Action: HOLD (1.26) | ROAS: 3.12
+  V2.1 Action: HOLD (1.10) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: slow sellers 21/10 campaign - 21/10/2025 13:03:58.957
+  V2  Action: HOLD (0.69) | ROAS: 3.14
+  V2.1 Action: HOLD (0.55) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: slow selling asins 5/12 campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (1.12) | ROAS: 3.60
+  V2.1 Action: HOLD (0.90) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: complements
+  Campaign: slow selling asins 5/12 campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (0.76) | ROAS: 4.72
+  V2.1 Action: HOLD (0.61) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: slow selling asins 5/12 campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (1.26) | ROAS: 5.40
+  V2.1 Action: HOLD (1.01) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: slow selling asins 5/12 campaign - 05/12/2025 09:36:03.654
+  V2  Action: HOLD (0.77) | ROAS: 3.16
+  V2.1 Action: HOLD (0.62) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: slow selling asins auto campaign - 05/07/2025 07:46:53.763
+  V2  Action: HOLD (0.49) | ROAS: 4.42
+  V2.1 Action: HOLD (0.39) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: slow selling asins auto campaign - 05/07/2025 07:46:53.763
+  V2  Action: HOLD (0.32) | ROAS: 17.17
+  V2.1 Action: HOLD (0.25) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: slow selling asins auto campaign - 05/07/2025 07:46:53.763
+  V2  Action: HOLD (0.43) | ROAS: 5.78
+  V2.1 Action: HOLD (0.34) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: sp high converting asins 07-jul-2025 9cdf69
+  V2  Action: HOLD (3.32) | ROAS: 2.20
+  V2.1 Action: HOLD (2.98) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: sp high converting asins 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.60) | ROAS: 6.28
+  V2.1 Action: HOLD (0.48) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: sp high converting asins 07-jul-2025 9cdf69
+  V2  Action: HOLD (1.52) | ROAS: 4.74
+  V2.1 Action: HOLD (1.21) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: complements
+  Campaign: sp high converting asins 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.48) | ROAS: 0.00
+  V2.1 Action: HOLD (0.38) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: sp high converting asins 07-jul-2025 9cdf69
+  V2  Action: HOLD (1.26) | ROAS: 5.74
+  V2.1 Action: HOLD (1.01) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: sp high converting asins 07-jul-2025 9cdf69
+  V2  Action: HOLD (0.61) | ROAS: 4.50
+  V2.1 Action: HOLD (0.49) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: close-match
+  Campaign: top ellers sp-a campaign - 05/12/2025 09:52:07.455
+  V2  Action: HOLD (1.77) | ROAS: 3.09
+  V2.1 Action: HOLD (1.42) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: top ellers sp-a campaign - 05/12/2025 09:52:07.455
+  V2  Action: HOLD (0.80) | ROAS: 5.25
+  V2.1 Action: HOLD (0.64) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: top ellers sp-a campaign - 05/12/2025 09:52:07.455
+  V2  Action: HOLD (0.75) | ROAS: 3.97
+  V2.1 Action: HOLD (0.60) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: tumbler 2.0 SP- A Campaign - 11/12/2025 11:43:12.443
+  V2  Action: HOLD (0.28) | ROAS: 0.00
+  V2.1 Action: HOLD (0.42) | Flags: INVENTORY_RISK
+  V2.1 Reason: Hold: Insufficient data (2 clicks)
+
+Target: substitutes
+  Campaign: wb- susbtitutes campaign - 13/07/2025 09:41:13.108
+  V2  Action: HOLD (0.72) | ROAS: 2.95
+  V2.1 Action: HOLD (0.57) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: loose-match
+  Campaign: zen_b0fwkf7zm3_auto
+  V2  Action: HOLD (1.68) | ROAS: 1.64
+  V2.1 Action: HOLD (1.86) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: substitutes
+  Campaign: zen_b0fwkf7zm3_auto
+  V2  Action: HOLD (0.90) | ROAS: 1.40
+  V2.1 Action: HOLD (0.99) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: category="Dish Drying Mats"
+  Campaign: AMZ-AE_Home and Kitchen_Dish Drying Mats_B0CWLN1MKG_SP_CAT TARGET_Profitfocus
+  V2  Action: HOLD (0.80) | ROAS: 9.73
+  V2.1 Action: HOLD (0.62) | Flags: HALO_ACTIVE
+  V2.1 Reason: Bid raised +25% — strong ROAS (6.51×). Bid capped at 25% safety limit., but organic dominates sales. Target relaxed to protect total efficiency.
+
+Target: category="Sports Water Bottles" brand="BEOLA"
+  Campaign: COMPETING BRANDS SSWB Campaign - 26/08/2025 11:08:45.783
+  V2  Action: HOLD (0.92) | ROAS: 22.91
+  V2.1 Action: HOLD (0.51) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid increase blocked — insufficient data (9 clicks, need 15).
+
+Target: category="Sports Water Bottles" brand="bottlebottle"
+  Campaign: COMPETING BRANDS SSWB Campaign - 26/08/2025 11:08:45.783
+  V2  Action: HOLD (1.15) | ROAS: 0.00
+  V2.1 Action: HOLD (0.67) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 1% above target ROAS across 14-day window.
+
+Target: category="Sports Water Bottles" brand="Owala"
+  Campaign: COMPETING BRANDS SSWB Campaign - 26/08/2025 11:08:45.783
+  V2  Action: HOLD (0.89) | ROAS: 7.49
+  V2.1 Action: HOLD (0.54) | Flags: INVENTORY_RISK
+  V2.1 Reason: Bid reduced — keyword spending 21% above target ROAS across 14-day window.
+
+Target: category="Sports Water Bottles" brand="S2C"
+  Campaign: COMPETING BRANDS SSWB Campaign - 26/08/2025 11:08:45.783
+  V2  Action: HOLD (1.05) | ROAS: 0.00
+  V2.1 Action: HOLD (0.93) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 1% above target ROAS across 14-day window.
+
+Target: category="Shower Caddies"
+  Campaign: SHWER CADDY PRODUCT TARGET Campaign - 06/07/2025 09:50:28.414
+  V2  Action: HOLD (0.73) | ROAS: 0.00
+  V2.1 Action: HOLD (0.60) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+Target: category="sports water bottles" brand="bottlebottle"
+  Campaign: competing brands sswb campaign - 26/08/2025 11:08:45.783
+  V2  Action: HOLD (0.61) | ROAS: 2.28
+  V2.1 Action: HOLD (0.67) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 1% above target ROAS across 14-day window.
+
+Target: category="sports water bottles" brand="s2c"
+  Campaign: competing brands sswb campaign - 26/08/2025 11:08:45.783
+  V2  Action: HOLD (0.83) | ROAS: 1.36
+  V2.1 Action: HOLD (0.93) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid reduced — keyword spending 1% above target ROAS across 14-day window.
+
+Target: category="shower caddies"
+  Campaign: shwer caddy product target campaign - 06/07/2025 09:50:28.414
+  V2  Action: HOLD (0.75) | ROAS: 5.30
+  V2.1 Action: HOLD (0.60) | Flags: INVENTORY_RISK,HALO_ACTIVE
+  V2.1 Reason: Bid increase blocked — critically low FBA stock remaining. Protecting spend until inventory is replenished.
+
+3. FLAG SUMMARY
+--------------------
+[HALO_ACTIVE] fired: 162 targets
+[INVENTORY_RISK] fired: 176 targets
+[CANNIBALIZE_RISK] fired: 5 targets
+
+Targets protected by INVENTORY_RISK (under 14 days supply):
+ - shower caddy
+ - beola water bottle
+ - birthday plate cup set
+ - dish drying stand
+ - disposable plates
+ - kids water bottle
+ - owala water bottle
+ - stainless steel water bottle for kids
+ - asin-expanded="b098r4h6y1"
+ - asin="b0ct49xppy"
+   ...and 166 more.
+
+HALO_ACTIVE Diagnostics (Validating Signal):
+ - coffee mat: 11 Paid Orders vs 151 Total AdGroup Units (Ratio: 13.7x)
+ - dish drying mat: 21 Paid Orders vs 151 Total AdGroup Units (Ratio: 7.2x)
+ - drying mat: 7 Paid Orders vs 151 Total AdGroup Units (Ratio: 21.6x)
+ - dog toys: 2 Paid Orders vs 88 Total AdGroup Units (Ratio: 44.0x)
+ - shower caddy: 4 Paid Orders vs 110 Total AdGroup Units (Ratio: 27.5x)
+
+4. FINANCIAL IMPACT ESTIMATE (Relative Proxy Based on Default 10x Click Velocity)
+--------------------
+V2   Projected Increase Cost (AED): 6470.74
+V2.1 Projected Increase Cost (AED): 6092.34
+Savings: 378.39 protected from waste on out-of-stock items.
+
+V2   Projected Decrease Savings (AED): 0.00
+V2.1 Projected Decrease Savings (AED): 0.00
+Delta: 0.00 difference (Halo targets protected from down-bidding)
+
+5. TARGETS V2.1 BLOCKED ENTIRELY
+--------------------
+No targets were exclusively blocked by V2.1.
+
+
+EXECUTIVE SUMMARY
+-----------------
+V2.1 modified 246 out of 659 total recommendations compared to V2. The intelligence layer suppressed AED 378.39 in risky bid changes across 0 targets primarily due to INVENTORY_RISK. 176 targets were explicitly protected from bid increases due to inventory risk (less than 14 days of supply), preventing ad spend on collapsing ASINs.

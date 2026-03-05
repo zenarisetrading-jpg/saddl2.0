@@ -1,0 +1,157 @@
+FBA Inventory Pipeline Verification Report
+Generated: 2026-02-21
+
+1) Code implementation status
+- Updated: pipelines/spapi_pipeline.py
+  - Added clean pull_fba_inventory(client_id) with 4-step Reports API flow
+  - Uses same auth/request pattern as Sales & Traffic:
+    - get_token(force_refresh=True)
+    - make_headers(access_token)
+    - auth=get_auth()
+    - requests.post/get
+  - Step 1 request: POST /reports/2021-06-30/reports
+    - reportType only (NO marketplaceIds)
+    - timeout=30
+    - 429 retry: 60s wait, up to 3 retries
+  - Step 2 poll: GET /reports/2021-06-30/reports/{reportId}
+    - poll every 30s, max 15 attempts
+    - handles DONE/FATAL/CANCELLED/timeout
+  - Step 3 document: GET /reports/2021-06-30/documents/{reportDocumentId}
+    - timeout=30 for SP-API request
+    - presigned file download timeout=60
+    - supports GZIP decompression
+    - parses tab-delimited with csv.DictReader
+  - Step 4 DB upsert: INSERT ... ON CONFLICT (client_id, asin, snapshot_date) DO UPDATE
+    - writes to sc_raw.fba_inventory
+    - includes snapshot_date = current UTC date
+  - Added required debug prints:
+    - Step 1: Requesting FBA inventory report...
+    - Step 1 complete: reportId = {reportId}
+    - Step 2: Polling for report completion...
+    - Step 2 poll {n}/15: status = {status}
+    - Step 2 complete: reportDocumentId = {id}
+    - Step 3: Downloading report document...
+    - Step 3 complete: {n} rows parsed
+    - Step 4: Writing to database...
+    - Step 4 complete: {n} rows written
+  - Entire function wrapped in try/except with full traceback logging and graceful None return.
+
+- Updated integration:
+  - pipelines/spapi_pipeline.py::run_daily_pull(client_id='s2c_uae_test')
+  - pipeline/runner.py::run_daily_pull()
+  - Behavior: inventory pull is triggered immediately after first successful Sales & Traffic pull.
+  - Token refresh is forced immediately before inventory pull.
+  - Inventory pull failures are isolated and do not crash sales pipeline.
+
+2) Local execution attempts in this environment
+Attempt A: run pull_fba_inventory without env vars
+- Result: FAILED
+- Error: Missing required env var: LWA_CLIENT_ID
+
+Attempt B: run pull_fba_inventory with values loaded from .env.pipeline.example
+- Result: FAILED
+- Error: DNS/network resolution failure to api.amazon.com
+  - requests.exceptions.ConnectionError
+  - urllib3.exceptions.NameResolutionError
+- This environment cannot reach Amazon SP-API endpoints.
+
+3) Verification checklist requested by task
+Because external SP-API network + DATABASE_URL are unavailable in this environment, live DB-write verification could not be completed here:
+- [ ] 4-step debug messages in successful sequence
+- [ ] Total rows written to inventory table
+- [ ] 5 sample rows (asin, afn_fulfillable_quantity, snapshot_date)
+- [ ] Join query output with optimizer_sp_feed
+- [ ] Runtime flag execution proving INVENTORY_RISK fires
+
+4) Confirmed logic for INVENTORY_RISK
+File: features/optimizer/intelligence.py
+Rule:
+- if days_of_supply < 14: append "INVENTORY_RISK"
+
+5) Commands to run in your environment (with network + DB access)
+A) Run inventory pull directly:
+python3 - <<'PY'
+from pipelines.spapi_pipeline import pull_fba_inventory
+rows = pull_fba_inventory(client_id='s2c_uae_test')
+print('ROWS_WRITTEN', rows)
+PY
+
+B) Show 5 sample inventory rows:
+python3 - <<'PY'
+import os, psycopg2
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
+with conn, conn.cursor() as cur:
+    cur.execute("""
+    SELECT asin, afn_fulfillable_quantity, snapshot_date
+    FROM sc_raw.fba_inventory
+    WHERE client_id = 's2c_uae_test' AND snapshot_date = CURRENT_DATE
+    LIMIT 5
+    """)
+    for r in cur.fetchall():
+        print(r)
+PY
+
+C) Run requested join query:
+python3 - <<'PY'
+import os, psycopg2
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
+with conn, conn.cursor() as cur:
+    cur.execute("""
+    SELECT
+      osf.asin,
+      osf.days_of_supply,
+      inv.afn_fulfillable_quantity
+    FROM optimizer_sp_feed osf
+    JOIN sc_raw.fba_inventory inv ON osf.asin = inv.asin
+      AND inv.snapshot_date = CURRENT_DATE
+    WHERE osf.client_id = 's2c_uae_test'
+      AND osf.days_of_supply IS NOT NULL
+    LIMIT 5;
+    """)
+    for r in cur.fetchall():
+        print(r)
+PY
+
+D) Confirm INVENTORY_RISK candidates from data:
+python3 - <<'PY'
+import os, psycopg2
+conn = psycopg2.connect(os.environ['DATABASE_URL'])
+with conn, conn.cursor() as cur:
+    cur.execute("""
+    SELECT asin, days_of_supply
+    FROM optimizer_sp_feed
+    WHERE client_id = 's2c_uae_test'
+      AND days_of_supply IS NOT NULL
+      AND days_of_supply < 14
+    LIMIT 20;
+    """)
+    rows = cur.fetchall()
+    print('INVENTORY_RISK_CANDIDATES', len(rows))
+    for r in rows:
+        print(r)
+PY
+
+
+
+6) Latest execution after .env copy (2026-02-21 07:53:06 UTC)
+- Confirmed .env copy performed:
+  - source path: ../.env
+  - target path: ./.env
+- Re-ran: pull_fba_inventory(client_id='s2c_uae_test')
+- Result: FAILED in this environment due to outbound DNS/network restriction
+  - Could not resolve api.amazon.com during LWA token refresh
+  - Error class: requests.exceptions.ConnectionError / urllib3.exceptions.NameResolutionError
+- DB checks status:
+  - DATABASE_URL not present in this process environment (HAS_DATABASE_URL=False)
+  - Could not execute row-count/sample/join/intelligence verification from this harness
+
+7) What you should run now on your machine
+- Ensure .env includes DATABASE_URL and SP-API credentials.
+- From desktop folder, run:
+  python3 - <<'PY'
+  from pipelines.spapi_pipeline import pull_fba_inventory
+  rows = pull_fba_inventory(client_id='s2c_uae_test')
+  print('ROWS_WRITTEN', rows)
+  PY
+
+- Then run DB verification script from section 5 in this report.

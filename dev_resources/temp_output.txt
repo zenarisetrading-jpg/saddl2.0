@@ -1,0 +1,64 @@
+Fetching Impact Data...
+
+================================================================================
+SECTION 1: IMPACT BY ACTION TYPE (Mature Only)
+================================================================================
+             Count       Impact
+action_type                    
+HARVEST         81  6382.876000
+NEGATIVE       291    37.015000
+BID_CHANGE    1306 -6219.013039
+----------------------------------------
+TOTAL MATURE IMPACT: 201
+
+================================================================================
+SECTION 2: VALIDATION STATUS BREAKDOWN (Focus on Spend Eliminated)
+================================================================================
+                               Count        Impact
+validation_status                                 
+✓ CPC Validated                  235 -15102.581293
+✓ Directional match               44  -3321.953320
+✓ Spend Eliminated                32  -2799.012000
+⚠️ Not validated                  70  -2136.372487
+✓ Volume Validated                73    -61.247116
+⚠️ NOT IMPLEMENTED               288      0.000000
+⚠️ Source still active             8      0.000000
+◐ Unverified (no target data)      1      0.000000
+◐ No after data                  104      0.000000
+◐ Dormant target                   8      0.000000
+⚠️ Migration 15%                   1      5.366900
+⚠️ Migration 41%                   1     11.200000
+⚠️ Migration 36%                   1     13.694100
+⚠️ Migration 9%                    1     18.843300
+✓ Harvested (complete)             1     20.344500
+⚠️ Migration 14%                   1     30.490000
+✓ Confirmed blocked                2     37.015000
+✓ Harvested (partial)             11    516.010500
+✓ Harvested (90%+ blocked)        19   1381.564000
+✓ Directional + Baseline          96   2433.436207
+◐ Beat baseline only             165   3135.222893
+✓ Harvested (migrated)            37   4385.362700
+✓ CPC Match + Baseline           479  11633.494076
+
+================================================================================
+SECTION 3: PAUSES DEEP DIVE ('Spend Eliminated')
+================================================================================
+Top 5 Negative Pauses (Profit Lost):
+      target_text                                  campaign_name  before_spend  before_sales  final_decision_impact
+      substitutes                               tumblers_sp_auto       431.200      1006.335               -575.135
+      complements                               tumblers_sp_auto       862.070      1341.780               -479.710
+      kids bottle 18ozswbpink campaign - 15/10/2025 13:01:56.883       188.075       627.350               -439.275
+water bottle kids 18ozswbpink campaign - 15/10/2025 13:01:56.883        90.225       412.400               -322.175
+     water bottle  750ml blue campaign - 15/10/2025 13:05:57.496        50.445       368.730               -318.285
+
+>> Complements Details:
+action_date                                                campaign_name                      ad_group_name  before_sales  before_spend
+ 2025-10-28                                             tumblers_sp_auto                           tumblers       1341.78       862.070
+ 2025-11-11 ksa - 24acryliccombo sp-a campaign - 22/09/2025 09:19:38.504 ad group - 22/09/2025 09:19:32.632          0.00        19.125
+
+================================================================================
+SECTION 4: OUTLIER CHECK ('loose-match')
+================================================================================
+target_text action_date  spc_before  cpc_before  final_decision_impact
+loose-match  2025-12-30    5.604173    0.651429            -910.820599
+(Note: SPC is Capped by ROAS Limit)

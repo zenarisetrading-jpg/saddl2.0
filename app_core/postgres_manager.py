@@ -1,0 +1,3877 @@
+"""
+PostgreSQL Database Manager for Supabase Integration.
+
+Implements the same interface as DatabaseManager but uses psycopg2 and PostgreSQL syntax.
+Handles 'ON CONFLICT' for upserts instead of 'INSERT OR REPLACE'.
+"""
+
+import os
+import warnings
+
+# Suppress pandas SQLAlchemy warnings
+warnings.filterwarnings('ignore', message='.*SQLAlchemy.*')
+warnings.filterwarnings('ignore', message='.*DBAPI2.*')
+# DB Driver Shim (V2 Migration Patch)
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor, execute_values, execute_batch
+    from psycopg2.pool import ThreadedConnectionPool
+except ImportError:
+    try:
+        import psycopg as psycopg2
+        # V3 Compatibility: Mock 'extras' and 'pool'
+        class MockExtras:
+            # Psycopg 3 has RowFactory/dict_row but for now mapped to simplistic dict
+            def RealDictCursor(self, *args, **kwargs): return None 
+            def execute_values(self, cur, sql, argslist, template=None, page_size=100):
+                # Basic emulation using executemany or v3 native batching
+                # This is a risky shim. For Phase 2 Auth specifically we don't need this complex manager yet.
+                # However, app load checks this file.
+                pass
+        
+        # ACTUALLY: V3 is too different to easily shim 'ThreadedConnectionPool'.
+        # Better approach: If psycopg2 fails, we define Dummy classes to allow Import to succeed,
+        # but the methods will fail if called (Auth Service doesn't use them).
+        
+        from psycopg.rows import dict_row
+        
+        # Shim 'RealDictCursor'
+        RealDictCursor = None # type: ignore
+        
+        # Shim 'execute_values'
+        execute_values = None # type: ignore
+        
+        # Shim 'ThreadedConnectionPool'
+        class ThreadedConnectionPool:
+            def __init__(self, minconn, maxconn, dsn=None, **kwargs):
+                self.dsn = dsn
+            def getconn(self): 
+                return psycopg2.connect(self.dsn)
+            def putconn(self, *args): pass
+            def closeall(self): pass
+            def closeall(self): pass
+            
+        psycopg2.extras = MockExtras() # type: ignore
+        
+    except ImportError:
+        raise ImportError("No Postgres driver found.")
+from typing import Optional, List, Dict, Any, Union
+from datetime import date, datetime, timedelta
+from contextlib import contextmanager
+import pandas as pd
+import uuid
+import time
+import functools
+import logging
+
+# ==========================================
+# BID VALIDATION CONFIGURATION
+# ==========================================
+BID_VALIDATION_CONFIG = {
+    "cpc_match_threshold": 0.20,              # 20% tolerance (per PRD 4.5.4)
+    "cpc_directional_threshold": 0.03,        # >3% CPC change (more sensitive)
+    "min_impressions_before": 20,             # Lowered for long-tail (was 50)
+    "impressions_increase_threshold": 0.15,   # +15% for bid ups (was 20%)
+    "impressions_decrease_threshold": 0.10,   # -10% for bid downs (was 15%)
+    "combined_impressions_threshold": 0.08,   # For combined validation (was 10%)
+}
+
+# ==========================================
+# HARVEST VALIDATION CONFIGURATION
+# ==========================================
+HARVEST_VALIDATION_CONFIG = {
+    # Tier thresholds (source spend drop %)
+    "complete_block_threshold": 0,        # $0 spend = complete
+    "near_complete_threshold": 0.90,      # 90%+ drop = near complete
+    "strong_migration_threshold": 0.75,   # 75%+ drop with growth = strong
+    "partial_migration_threshold": 0.50,  # 50%+ drop with 25%+ growth = partial
+
+    # Exact match growth requirement for lower tiers
+    "exact_growth_required_for_partial": 0.25,  # 25% growth
+
+    # Minimum source spend to validate (avoid noise)
+    "min_source_before_spend": 5.0,
+}
+
+# ==========================================
+# IMPACT MODEL v3.3 CONFIGURATION
+# ==========================================
+# ROLLBACK SAFETY: Feature flag for instant model version switching
+# Change this to "v3.2" to immediately revert to the previous impact model
+#
+# v3.3 Changes:
+#   - Layered counterfactual with market shift + scale adjustments
+#   - Asymmetric penalty reduction for negative outcomes
+#   - Harvest 0.85x efficiency factor moved to DB layer
+#   - New columns: market_shift, scale_factor, impact_v33, final_impact_v33
+#
+# Rollback Steps:
+#   1. Set IMPACT_MODEL_VERSION = "v3.2" below
+#   2. Redeploy application
+#   3. v3.2 backup columns (_v32) will be available for comparison
+#   4. Dashboard will automatically use v3.2 calculations
+IMPACT_MODEL_VERSION = "v3.3"  # Options: "v3.3" | "v3.2"
+
+# Diminishing returns exponent (α)
+# At α=0.3: 2x clicks → expect 81% of before_spc (19% efficiency drop)
+# At α=0.3: 3x clicks → expect 76% of before_spc (24% efficiency drop)
+SCALE_ALPHA = 0.3
+
+# Minimum click ratio threshold for scale adjustment
+# Apply diminishing returns only when click_ratio > this value
+SCALE_THRESHOLD = 1.0
+
+# Market shift bounds (prevent extreme adjustments)
+# Account-level SPC change clamped to this range
+MARKET_SHIFT_BOUNDS = (0.5, 1.5)  # 50% to 150%
+
+# Scale factor bounds (prevent extreme diminishing returns)
+# Per-row scale adjustment clamped to this range
+SCALE_FACTOR_BOUNDS = (0.5, 1.0)  # 50% to 100%
+
+# Harvest efficiency decline factor
+# Harvested keywords experience ~15% efficiency drop when moving to exact match
+HARVEST_EFFICIENCY_FACTOR = 0.85
+
+
+def get_impact_model_version() -> str:
+    """
+    Get the current impact model version.
+
+    Returns:
+        str: "v3.2" or "v3.3"
+
+    Usage:
+        This function should be used when exporting data or displaying
+        version information to ensure model version is correctly tracked.
+    """
+    return IMPACT_MODEL_VERSION
+
+# ==========================================
+# PERFORMANCE: Simple TTL Cache
+# ==========================================
+class TTLCache:
+    """Simple time-based cache for query results."""
+    def __init__(self, ttl_seconds: int = 60):
+        self._cache = {}
+        self._ttl = ttl_seconds
+    
+    def get(self, key: str) -> Optional[Any]:
+        if key in self._cache:
+            value, timestamp = self._cache[key]
+            if time.time() - timestamp < self._ttl:
+                return value
+            del self._cache[key]
+        return None
+    
+    def set(self, key: str, value: Any):
+        self._cache[key] = (value, time.time())
+    
+    def clear(self):
+        self._cache.clear()
+
+# Global cache instance
+# _query_cache = TTLCache(ttl_seconds=60)  # REMOVED: Rely on Streamlit cache
+
+def retry_on_connection_error(max_retries: int = 3, base_delay: float = 1.0):
+    """Decorator for retrying database operations with exponential backoff."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)  # 1s, 2s, 4s
+                        print(f"Connection error (attempt {attempt + 1}/{max_retries}): {e}. Retrying in {delay}s...")
+                        time.sleep(delay)
+                        # Reset connection pool on error
+                        if hasattr(args[0], '_reset_pool'):
+                            args[0]._reset_pool()
+            raise last_error
+        return wrapper
+    return decorator
+
+class PostgresManager:
+    """
+    PostgreSQL persistence for Supabase / Cloud Postgres.
+    Uses connection pooling with retry logic and health checking.
+    """
+    
+    _pool = None  # Class-level connection pool
+    _pool_lock = None  # For thread safety
+    
+    def __init__(self, db_url: str):
+        """
+        Initialize Postgres manager with resilient connection pooling.
+        
+        Args:
+            db_url: Postgres connection string (postgres://user:pass@host:port/db)
+        """
+        self.db_url = db_url
+        self._init_pool()
+
+        # ── Schema init guard ────────────────────────────────────────────────
+        # The old process-level set (`_initialized_dbs`) was reset on every
+        # Streamlit hot-reload, causing 33 DDL round-trips (~4 s) on each page
+        # navigation. We now persist a single `schema_version` row in the DB
+        # and skip `_init_schema()` when the version already matches. The guard
+        # check costs one fast SELECT (≈50 ms) instead of 33 DDL statements.
+        if not self._schema_is_current():
+            self._init_schema()
+    
+    def _init_pool(self):
+        """Initialize or reinitialize connection pool with optimal settings."""
+        if PostgresManager._pool is not None:
+            return
+        
+        # Parse and add connection options for resilience
+        # Add timeout and keepalive settings
+        dsn = self.db_url
+        if '?' not in dsn:
+            dsn += '?'
+        else:
+            dsn += '&'
+        
+        # Performance & Reliability defaults
+        options = 'connect_timeout=10&keepalives=1&keepalives_idle=30&keepalives_interval=5&keepalives_count=3&options=-c%20statement_timeout%3D45000'
+        
+        # Supabase/Cloud requires SSL
+        if 'sslmode' not in dsn:
+            options += '&sslmode=require'
+            
+        dsn += options
+        
+        PostgresManager._pool = ThreadedConnectionPool(
+            minconn=1,
+            maxconn=5,  # Reduced from 10 to prevent exhaustion
+            dsn=dsn
+        )
+    
+    def _reset_pool(self):
+        """Reset connection pool after errors."""
+        if PostgresManager._pool is not None:
+            try:
+                PostgresManager._pool.closeall()
+            except:
+                pass
+            PostgresManager._pool = None
+        self._init_pool()
+    
+    @property
+    def placeholder(self) -> str:
+        """SQL parameter placeholder for Postgres."""
+        return "%s"
+    
+    @contextmanager
+    def _get_connection(self):
+        """Context manager for safe database connections.
+
+        PERFORMANCE NOTE: The previous implementation ran `SELECT 1` on every
+        connection acquisition (one extra Supabase round-trip per query = 50-150ms
+        per page render). That overhead has been removed.
+
+        `rollback()` is kept as it clears any aborted-transaction state locally
+        (psycopg2 does NOT send ROLLBACK to the server when the connection is
+        already idle, so it's effectively free for healthy connections).
+        If a connection is truly broken, the actual query will raise and the
+        except block closes it and surfaces the error normally.
+        """
+        pool = PostgresManager._pool
+        if pool is None:
+            self._init_pool()
+            pool = PostgresManager._pool
+
+        conn = None
+        try:
+            conn = pool.getconn()
+            conn.rollback()   # Clear any leftover aborted-transaction state (local op)
+            yield conn
+            conn.commit()
+        except Exception as e:
+            if conn:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                # If the connection is broken, close it so the pool doesn't reuse it
+                try:
+                    pool.putconn(conn, close=True)
+                    conn = None
+                except Exception:
+                    pass
+            raise e
+        finally:
+            if conn:
+                try:
+                    pool.putconn(conn)
+                except Exception:
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+    
+    # Bump this string whenever you add a new table or column to _init_schema.
+    # Any running instance will detect the version mismatch and re-run the DDL.
+    _SCHEMA_VERSION = "v9"
+
+    def _schema_is_current(self) -> bool:
+        """Return True if the DB already has the expected schema version.
+
+        Costs one fast SELECT (≈50 ms on Supabase).  Falls back to False
+        (triggers full init) if the marker table doesn't exist yet.
+        """
+        # Also cache in class-level set to avoid even the SELECT on same process restarts
+        if not hasattr(PostgresManager, '_initialized_dbs'):
+            PostgresManager._initialized_dbs = set()
+        cache_key = f"{self.db_url}:{self._SCHEMA_VERSION}"
+        if cache_key in PostgresManager._initialized_dbs:
+            return True
+
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        SELECT version FROM app_schema_version LIMIT 1
+                    """)
+                    row = cur.fetchone()
+                    if row and row[0] == self._SCHEMA_VERSION:
+                        PostgresManager._initialized_dbs.add(cache_key)
+                        return True
+        except Exception:
+            pass  # Table doesn't exist yet — need full init
+        return False
+
+    def _mark_schema_current(self):
+        """Persist the current schema version to the DB."""
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS app_schema_version (
+                        version TEXT PRIMARY KEY,
+                        applied_at TIMESTAMP DEFAULT NOW()
+                    )
+                """)
+                cur.execute("""
+                    INSERT INTO app_schema_version (version, applied_at)
+                    VALUES (%s, NOW())
+                    ON CONFLICT (version) DO UPDATE SET applied_at = NOW()
+                """, (self._SCHEMA_VERSION,))
+        cache_key = f"{self.db_url}:{self._SCHEMA_VERSION}"
+        if not hasattr(PostgresManager, '_initialized_dbs'):
+            PostgresManager._initialized_dbs = set()
+        PostgresManager._initialized_dbs.add(cache_key)
+
+    def _init_schema(self):
+        """Create tables if they don't exist."""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                # Weekly Stats Table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS weekly_stats (
+                        id SERIAL PRIMARY KEY,
+                        client_id TEXT NOT NULL,
+                        start_date DATE NOT NULL,
+                        end_date DATE NOT NULL,
+                        spend DOUBLE PRECISION DEFAULT 0,
+                        sales DOUBLE PRECISION DEFAULT 0,
+                        roas DOUBLE PRECISION DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(client_id, start_date)
+                    )
+                """)
+                
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_weekly_stats_client_date ON weekly_stats(client_id, start_date)")
+                
+                # Target Stats Table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS target_stats (
+                        id SERIAL PRIMARY KEY,
+                        client_id TEXT NOT NULL,
+                        start_date DATE NOT NULL,
+                        end_date DATE,
+                        campaign_name TEXT NOT NULL,
+                        ad_group_name TEXT NOT NULL,
+                        target_text TEXT NOT NULL,
+                        customer_search_term TEXT,
+                        match_type TEXT,
+                        spend DOUBLE PRECISION DEFAULT 0,
+                        sales DOUBLE PRECISION DEFAULT 0,
+                        clicks INTEGER DEFAULT 0,
+                        impressions INTEGER DEFAULT 0,
+                        orders INTEGER DEFAULT 0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(client_id, start_date, campaign_name, ad_group_name, target_text, customer_search_term, match_type)
+                    )
+                """)
+                
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_target_stats_lookup ON target_stats(client_id, start_date, campaign_name)")
+                
+                # Actions Log Table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS actions_log (
+                        id SERIAL PRIMARY KEY,
+                        action_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        client_id TEXT NOT NULL,
+                        batch_id TEXT NOT NULL,
+                        entity_name TEXT,
+                        action_type TEXT NOT NULL,
+                        old_value TEXT,
+                        new_value TEXT,
+                        reason TEXT,
+                        campaign_name TEXT,
+                        ad_group_name TEXT,
+                        target_text TEXT,
+                        match_type TEXT,
+                        intelligence_flags TEXT,
+                        UNIQUE(client_id, action_date, target_text, action_type, campaign_name)
+                    )
+                """)
+                
+                # Dynamic Schema Update (V2.1)
+                try:
+                    cursor.execute("ALTER TABLE actions_log ADD COLUMN IF NOT EXISTS intelligence_flags TEXT")
+                except Exception:
+                    pass
+                
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_actions_log_batch ON actions_log(batch_id, action_date)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_actions_log_client ON actions_log(client_id, action_date)")
+                
+                # Category Mappings
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS category_mappings (
+                        client_id TEXT NOT NULL,
+                        sku TEXT NOT NULL,
+                        category TEXT,
+                        sub_category TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (client_id, sku)
+                    )
+                """)
+                
+                # Advertised Product Cache
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS advertised_product_cache (
+                        client_id TEXT NOT NULL,
+                        campaign_name TEXT,
+                        ad_group_name TEXT,
+                        sku TEXT,
+                        asin TEXT,
+                        product_lifecycle TEXT DEFAULT 'mature',
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(client_id, campaign_name, ad_group_name, sku)
+                    )
+                """)
+                
+                # Dynamic Lifecycle Updates (V2.1)
+                try:
+                    cursor.execute("ALTER TABLE advertised_product_cache ADD COLUMN IF NOT EXISTS product_lifecycle TEXT DEFAULT 'mature'")
+                except Exception:
+                    pass
+                
+                # Bulk Mappings
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS bulk_mappings (
+                        client_id TEXT NOT NULL,
+                        campaign_name TEXT,
+                        campaign_id TEXT,
+                        ad_group_name TEXT,
+                        ad_group_id TEXT,
+                        keyword_text TEXT,
+                        keyword_id TEXT,
+                        targeting_expression TEXT,
+                        targeting_id TEXT,
+                        sku TEXT,
+                        match_type TEXT,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(client_id, campaign_name, ad_group_name, keyword_text, targeting_expression)
+                    )
+                """)
+                
+                # Accounts
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS accounts (
+                        account_id TEXT PRIMARY KEY,
+                        account_name TEXT NOT NULL,
+                        account_type TEXT DEFAULT 'brand',
+                        metadata TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # Account Health Metrics (for Home page cockpit)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS account_health_metrics (
+                        client_id TEXT PRIMARY KEY,
+                        health_score DOUBLE PRECISION,
+                        roas_score DOUBLE PRECISION,
+                        waste_score DOUBLE PRECISION,
+                        cvr_score DOUBLE PRECISION,
+                        waste_ratio DOUBLE PRECISION,
+                        wasted_spend DOUBLE PRECISION,
+                        current_roas DOUBLE PRECISION,
+                        current_acos DOUBLE PRECISION,
+                        cvr DOUBLE PRECISION,
+                        total_spend DOUBLE PRECISION,
+                        total_sales DOUBLE PRECISION,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+
+                # Organizations Table
+                # Matches 002_org_users_schema.sql
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS organizations (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        name VARCHAR(255) NOT NULL,
+                        type VARCHAR(20) NOT NULL CHECK (type IN ('AGENCY', 'SELLER')),
+                        subscription_plan VARCHAR(50), 
+                        amazon_account_limit INT NOT NULL DEFAULT 5,
+                        seat_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                        status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'SUSPENDED')),
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                """)
+
+                # Users Table (Auth V2)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        organization_id TEXT NOT NULL,
+                        email TEXT NOT NULL UNIQUE,
+                        password_hash TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        billable BOOLEAN DEFAULT TRUE,
+                        status TEXT DEFAULT 'ACTIVE',
+                        must_reset_password BOOLEAN DEFAULT FALSE,
+                        password_updated_at TIMESTAMP,
+                        last_login_at TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                
+                # MIGRATION: Ensure last_login_at exists (for existing tables)
+                try:
+                    cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP")
+                except Exception:
+                    pass
+                
+                # User Account Overrides Table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS user_account_overrides (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        amazon_account_id TEXT NOT NULL,
+                        role TEXT NOT NULL,
+                        created_by TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(user_id, amazon_account_id)
+                    )
+                """)
+
+                # Raw Search Term Data (Daily Granularity)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS raw_search_term_data (
+                        id SERIAL PRIMARY KEY,
+                        client_id TEXT NOT NULL,
+                        report_date DATE NOT NULL,
+                        campaign_name TEXT,
+                        ad_group_name TEXT,
+                        targeting TEXT,
+                        customer_search_term TEXT,
+                        match_type TEXT,
+                        impressions INTEGER DEFAULT 0,
+                        clicks INTEGER DEFAULT 0,
+                        spend DOUBLE PRECISION DEFAULT 0,
+                        sales DOUBLE PRECISION DEFAULT 0,
+                        orders INTEGER DEFAULT 0,
+                        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(client_id, report_date, campaign_name, ad_group_name, targeting, customer_search_term)
+                    )
+                """)
+                
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_raw_st_week ON raw_search_term_data(client_id, report_date)")
+
+                # Shared Reports Table (for Portable Share Feature)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS shared_reports (
+                        id VARCHAR(8) PRIMARY KEY,
+                        client_id TEXT NOT NULL,
+                        date_range TEXT NOT NULL,
+                        metadata JSONB,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        expires_at TIMESTAMP NOT NULL,
+                        accessed_count INTEGER DEFAULT 0,
+                        last_accessed TIMESTAMP
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_shared_reports_client ON shared_reports(client_id)")
+
+                # Ensure sc_raw schema exists for SP-API
+                cursor.execute("CREATE SCHEMA IF NOT EXISTS sc_raw")
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sc_raw.sales_traffic (
+                        id BIGSERIAL PRIMARY KEY,
+                        report_date DATE NOT NULL,
+                        marketplace_id VARCHAR(20) NOT NULL,
+                        child_asin VARCHAR(20) NOT NULL,
+                        parent_asin VARCHAR(20),
+                        ordered_revenue NUMERIC(14,2),
+                        ordered_revenue_currency VARCHAR(3),
+                        units_ordered INTEGER,
+                        total_order_items INTEGER,
+                        page_views INTEGER,
+                        sessions INTEGER,
+                        buy_box_percentage NUMERIC(5,2),
+                        unit_session_percentage NUMERIC(5,2),
+                        order_item_session_percentage NUMERIC(5,2),
+                        pulled_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        query_id VARCHAR(100),
+                        UNIQUE (report_date, marketplace_id, child_asin)
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sc_raw.account_totals (
+                        id BIGSERIAL PRIMARY KEY,
+                        report_date DATE NOT NULL,
+                        marketplace_id VARCHAR(20) NOT NULL,
+                        total_ordered_revenue NUMERIC(16,2),
+                        total_units_ordered INTEGER,
+                        total_page_views INTEGER,
+                        total_sessions INTEGER,
+                        asin_count INTEGER,
+                        computed_at TIMESTAMPTZ,
+                        UNIQUE (report_date, marketplace_id)
+                    )
+                """)
+                
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sc_raw.fba_inventory (
+                        id BIGSERIAL PRIMARY KEY,
+                        client_id VARCHAR(50) NOT NULL,
+                        snapshot_date DATE NOT NULL,
+                        asin VARCHAR(50) NOT NULL,
+                        sku VARCHAR(100),
+                        fnsku VARCHAR(50),
+                        product_name TEXT,
+                        condition VARCHAR(50),
+                        your_price NUMERIC(10,2),
+                        mfn_listing_exists VARCHAR(20),
+                        afn_listing_exists VARCHAR(20),
+                        afn_warehouse_quantity INT,
+                        afn_fulfillable_quantity INT,
+                        afn_unsellable_quantity INT,
+                        afn_reserved_quantity INT,
+                        afn_total_quantity INT,
+                        per_unit_volume NUMERIC(10,2),
+                        afn_inbound_working_quantity INT,
+                        afn_inbound_shipped_quantity INT,
+                        afn_inbound_receiving_quantity INT,
+                        pulled_at TIMESTAMPTZ DEFAULT NOW(),
+                        UNIQUE (client_id, asin, snapshot_date)
+                    )
+                """)
+                
+                # ── sc_raw.bsr_history ───────────────────────────────────
+                # Not in the original schema — create it here.
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS sc_raw.bsr_history (
+                        id BIGSERIAL PRIMARY KEY,
+                        report_date DATE NOT NULL,
+                        marketplace_id VARCHAR(20),
+                        account_id TEXT,
+                        asin VARCHAR(20) NOT NULL,
+                        category_name TEXT,
+                        category_id BIGINT,
+                        rank INTEGER,
+                        pulled_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+
+                # ── IDEMPOTENT COLUMN MIGRATIONS ──────────────────────────
+                # Old pipeline created sc_raw.sales_traffic with account_id NOT NULL.
+                # New pipeline (pipelines/spapi_pipeline.py) does not write account_id.
+                # Drop the NOT NULL constraint so inserts succeed on both old and new tables.
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        ALTER TABLE sc_raw.sales_traffic ALTER COLUMN account_id DROP NOT NULL;
+                    EXCEPTION WHEN OTHERS THEN NULL;
+                    END $$;
+                """)
+
+                # ── IDEMPOTENT CONSTRAINT MIGRATIONS ─────────────────────
+                # CREATE TABLE IF NOT EXISTS does NOT alter pre-existing tables,
+                # so tables created by older pipelines may have wrong/missing
+                # unique constraints.  CREATE UNIQUE INDEX IF NOT EXISTS adds
+                # the constraint without touching data.
+                #
+                # Each block is wrapped in PL/pgSQL EXCEPTION so a single
+                # failure (e.g. duplicate rows blocking the index) does NOT
+                # abort the rest of the transaction.
+                #
+                # sc_raw.sales_traffic — new pipeline: (report_date, marketplace_id, child_asin)
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_sales_traffic_rpt_mkt_asin
+                        ON sc_raw.sales_traffic (report_date, marketplace_id, child_asin);
+                    EXCEPTION WHEN OTHERS THEN NULL;
+                    END $$;
+                """)
+                # sc_raw.account_totals — (report_date, marketplace_id)
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_account_totals_rpt_mkt
+                        ON sc_raw.account_totals (report_date, marketplace_id);
+                    EXCEPTION WHEN OTHERS THEN NULL;
+                    END $$;
+                """)
+                # sc_raw.fba_inventory — (client_id, asin, snapshot_date)
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_fba_inventory_clt_asin_date
+                        ON sc_raw.fba_inventory (client_id, asin, snapshot_date);
+                    EXCEPTION WHEN OTHERS THEN NULL;
+                    END $$;
+                """)
+                # sc_raw.bsr_history — (report_date, marketplace_id, account_id, asin, category_id)
+                cursor.execute("""
+                    DO $$
+                    BEGIN
+                        CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_bsr_history_rpt_mkt_acct_asin_cat
+                        ON sc_raw.bsr_history (report_date, marketplace_id, account_id, asin, category_id);
+                    EXCEPTION WHEN OTHERS THEN NULL;
+                    END $$;
+                """)
+
+                # ── Commerce Metrics View (V2.1 Intelligence Layer) ───────
+                # Calculates organic CVR and days of supply per ASIN by joining SP-API data
+                cursor.execute("""
+                    CREATE OR REPLACE VIEW commerce_metrics AS
+                    SELECT DISTINCT ON (apc.client_id, apc.asin)
+                        apc.client_id,
+                        apc.asin,
+                        apc.sku,
+                        apc.product_lifecycle,
+                        COALESCE(st.ordered_revenue, 0) AS ordered_revenue,
+                        COALESCE(st.units_ordered, 0) AS units_ordered,
+                        COALESCE(st.sessions, 0) AS sessions,
+                        COALESCE(st.page_views, 0) AS page_views,
+                        CASE WHEN st.sessions > 0 THEN CAST(st.units_ordered AS FLOAT) / st.sessions ELSE 0 END AS organic_cvr,
+                        CASE 
+                            WHEN inv.asin IS NULL THEN 999 -- Missing FBA data triggers safe fallback
+                            WHEN COALESCE(st.units_ordered_14d, 0) > 0 THEN 
+                                COALESCE(inv.afn_fulfillable_quantity, 0) / (CAST(st.units_ordered_14d AS FLOAT) / 14.0)
+                            ELSE 999 
+                        END AS days_of_supply,
+                        COALESCE(inv.afn_fulfillable_quantity, 0) AS fulfillable_quantity,
+                        COALESCE(inv.afn_total_quantity, 0) AS total_inventory
+                    FROM advertised_product_cache apc
+                    LEFT JOIN (
+                        -- Aggregate last 30 and 14 days of sales traffic
+                        SELECT child_asin, 
+                               SUM(ordered_revenue) as ordered_revenue,
+                               SUM(units_ordered) as units_ordered,
+                               SUM(sessions) as sessions,
+                               SUM(page_views) as page_views,
+                               SUM(CASE WHEN report_date >= CURRENT_DATE - INTERVAL '14 days' THEN units_ordered ELSE 0 END) as units_ordered_14d
+                        FROM sc_raw.sales_traffic
+                        WHERE report_date >= CURRENT_DATE - INTERVAL '30 days'
+                        GROUP BY child_asin
+                    ) st ON apc.asin = st.child_asin
+                    LEFT JOIN (
+                        -- Get latest inventory snapshot per ASIN/client
+                        SELECT DISTINCT ON (client_id, asin) 
+                               client_id, 
+                               asin, 
+                               afn_fulfillable_quantity, 
+                               afn_total_quantity
+                        FROM sc_raw.fba_inventory
+                        ORDER BY client_id, asin, snapshot_date DESC
+                    ) inv ON apc.client_id = inv.client_id AND apc.asin = inv.asin
+                    ORDER BY apc.client_id, apc.asin
+                """)
+
+        # Persist schema version — subsequent startups skip all DDL above
+        self._mark_schema_current()
+
+    def save_weekly_stats(self, client_id: str, start_date: date, end_date: date, spend: float, sales: float, roas: Optional[float] = None) -> int:
+        if roas is None:
+            roas = sales / spend if spend > 0 else 0.0
+        
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    INSERT INTO weekly_stats (client_id, start_date, end_date, spend, sales, roas, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                    ON CONFLICT (client_id, start_date) DO UPDATE SET
+                        end_date = EXCLUDED.end_date,
+                        spend = EXCLUDED.spend,
+                        sales = EXCLUDED.sales,
+                        roas = EXCLUDED.roas,
+                        updated_at = CURRENT_TIMESTAMP
+                    RETURNING id
+                """, (client_id, start_date, end_date, spend, sales, roas))
+                result = cursor.fetchone()
+                return result['id'] if result else 0
+
+    def save_target_stats_batch(self, df: pd.DataFrame, client_id: str, start_date: Union[date, str] = None) -> int:
+        """
+        Save granular target-level performance stats from Search Term Report.
+        
+        SYNCED WITH SQLite VERSION - includes auto campaign handling.
+        """
+        if df is None or df.empty:
+            return 0
+        
+        # ==========================================
+        # DUAL COLUMN STRATEGY
+        # ==========================================
+        # target_text = Targeting expression (close-match, asin=, keyword) → FOR BIDS
+        # customer_search_term = Actual search query → FOR HARVEST/NEGATIVE
+        #
+        # We need BOTH columns:
+        # - Bids for auto campaigns must use targeting type (close-match, loose-match)
+        # - Harvest detection needs actual search queries
+        
+        # Column for BIDDING (targeting types, keywords, ASINs)
+        target_col = None
+        for col in ['Targeting', 'Customer Search Term', 'Keyword Text']:
+            if col in df.columns and not df[col].isna().all():
+                target_col = col
+                break
+        
+        # Column for HARVEST/NEGATIVE (actual search queries)
+        cst_col = None
+        if 'Customer Search Term' in df.columns and not df['Customer Search Term'].isna().all():
+            cst_col = 'Customer Search Term'
+        
+        if target_col is None:
+            return 0
+        
+        # Required columns check
+        required = ['Campaign Name', 'Ad Group Name']
+        if not all(col in df.columns for col in required):
+            return 0
+        
+        # Aggregation columns
+        agg_cols = {}
+        if 'Spend' in df.columns:
+            agg_cols['Spend'] = 'sum'
+        if 'Sales' in df.columns:
+            agg_cols['Sales'] = 'sum'
+        if 'Clicks' in df.columns:
+            agg_cols['Clicks'] = 'sum'
+        if 'Impressions' in df.columns:
+            agg_cols['Impressions'] = 'sum'
+        if 'Orders' in df.columns:
+            agg_cols['Orders'] = 'sum'
+        if 'Match Type' in df.columns:
+            agg_cols['Match Type'] = 'first'
+        
+        if not agg_cols:
+            return 0
+        
+        # Create working copy
+        df_copy = df.copy()
+        
+        
+        # Note: target_col is already determined above, prioritizing Customer Search Term
+        
+        # ==========================================
+        # WEEKLY SPLITTING LOGIC
+        # ==========================================
+        date_col = None
+        for col in ['Date', 'Start Date', 'Report Date', 'date', 'start_date']:
+            if col in df_copy.columns:
+                date_col = col
+                break
+        
+        if date_col:
+            # Handle Date Range strings
+            if df_copy[date_col].dtype == object and df_copy[date_col].astype(str).str.contains(' - ').any():
+                df_copy[date_col] = df_copy[date_col].astype(str).str.split(' - ').str[0]
+            
+            df_copy['_date'] = pd.to_datetime(df_copy[date_col], errors='coerce')
+            df_copy['_week_start'] = df_copy['_date'].dt.to_period('W-MON').dt.start_time.dt.date
+            weeks = df_copy['_week_start'].dropna().unique()
+        else:
+            if start_date is None:
+                start_date = datetime.now().date()
+            elif isinstance(start_date, str):
+                try:
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                except:
+                    start_date = datetime.now().date()
+            
+            days_since_monday = start_date.weekday()
+            week_start_monday = start_date - timedelta(days=days_since_monday)
+            df_copy['_week_start'] = week_start_monday
+            weeks = [week_start_monday]
+        
+        # Create normalized grouping keys
+        df_copy['_camp_norm'] = df_copy['Campaign Name'].astype(str).str.lower().str.strip()
+        df_copy['_ag_norm'] = df_copy['Ad Group Name'].astype(str).str.lower().str.strip()
+        df_copy['_target_norm'] = df_copy[target_col].astype(str).str.lower().str.strip()
+        
+        # Add CST normalization for harvest/negative detection
+        if cst_col:
+            df_copy['_cst_norm'] = df_copy[cst_col].astype(str).str.lower().str.strip()
+        else:
+            df_copy['_cst_norm'] = df_copy['_target_norm']  # Fallback to target if no CST
+        
+        total_saved = 0
+        
+        for week_start in weeks:
+            if pd.isna(week_start):
+                continue
+            
+            week_data = df_copy[df_copy['_week_start'] == week_start]
+            if week_data.empty:
+                continue
+            
+            # Group by Campaign/AdGroup/Target/CST to preserve search term granularity
+            grouped = week_data.groupby(['_camp_norm', '_ag_norm', '_target_norm', '_cst_norm']).agg(agg_cols).reset_index()
+            
+            week_start_str = week_start.isoformat() if isinstance(week_start, date) else str(week_start)[:10]
+            
+            # Prepare records for bulk insert (now includes CST)
+            records = []
+            for _, row in grouped.iterrows():
+                match_type_norm = str(row.get('Match Type', '')).lower().strip()
+                records.append((
+                    client_id,
+                    week_start_str,
+                    row['_camp_norm'],
+                    row['_ag_norm'],
+                    row['_target_norm'],
+                    row['_cst_norm'],  # NEW: customer_search_term
+                    match_type_norm,
+                    float(row.get('Spend', 0) or 0),
+                    float(row.get('Sales', 0) or 0),
+                    int(row.get('Orders', 0) or 0),
+                    int(row.get('Clicks', 0) or 0),
+                    int(row.get('Impressions', 0) or 0)
+                ))
+            
+            if records:
+                with self._get_connection() as conn:
+                    with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                        execute_values(cursor, """
+                            INSERT INTO target_stats 
+                            (client_id, start_date, campaign_name, ad_group_name, target_text, 
+                             customer_search_term, match_type, spend, sales, orders, clicks, impressions)
+                            VALUES %s
+                            ON CONFLICT (client_id, start_date, campaign_name, ad_group_name, target_text, customer_search_term, match_type)
+                            DO UPDATE SET
+                                spend = EXCLUDED.spend,
+                                sales = EXCLUDED.sales,
+                                orders = EXCLUDED.orders,
+                                clicks = EXCLUDED.clicks,
+                                impressions = EXCLUDED.impressions,
+                                updated_at = CURRENT_TIMESTAMP
+                        """, records)
+                
+                total_saved += len(records)
+        
+        return total_saved
+
+    # ==========================================
+    # RAW SEARCH TERM DATA STORAGE
+    # ==========================================
+    
+    def save_raw_search_term_data(self, df: pd.DataFrame, client_id: str, batch_size: int = 5000) -> int:
+        """
+        Save raw daily search term data BEFORE weekly aggregation.
+        Preserves original granularity for re-aggregation and auditing.
+        
+        Flow: Upload → raw_search_term_data (daily) → reaggregate → target_stats (weekly)
+        
+        Args:
+            df: DataFrame with Date, Campaign Name, Ad Group Name, Targeting, 
+                Customer Search Term, Match Type, Impressions, Clicks, Spend, Sales, Orders
+            client_id: Account identifier
+            batch_size: Rows per batch insert (default 5000 for large uploads)
+        
+        Returns:
+            Number of rows saved
+        """
+        if df is None or df.empty:
+            return 0
+        
+        # Determine date column
+        date_col = None
+        for col in ['Date', 'Start Date', 'Report Date', 'date', 'start_date', 'report_date']:
+            if col in df.columns:
+                date_col = col
+                break
+        
+        if date_col is None:
+            print("WARNING: No date column found in raw data upload")
+            return 0
+        
+        # Required columns
+        camp_col = next((c for c in ['Campaign Name', 'campaign_name'] if c in df.columns), None)
+        ag_col = next((c for c in ['Ad Group Name', 'ad_group_name'] if c in df.columns), None)
+        
+        if not camp_col or not ag_col:
+            print("WARNING: Missing Campaign Name or Ad Group Name columns")
+            return 0
+        
+        # Optional columns
+        targeting_col = next((c for c in ['Targeting', 'targeting'] if c in df.columns), None)
+        cst_col = next((c for c in ['Customer Search Term', 'customer_search_term'] if c in df.columns), None)
+        mt_col = next((c for c in ['Match Type', 'match_type'] if c in df.columns), None)
+        
+        # Prepare records
+        records = []
+        for _, row in df.iterrows():
+            # Parse date
+            report_date = pd.to_datetime(row[date_col], errors='coerce')
+            if pd.isna(report_date):
+                continue
+            
+            records.append((
+                client_id,
+                report_date.date().isoformat(),
+                str(row[camp_col]).lower().strip() if pd.notna(row[camp_col]) else '',
+                str(row[ag_col]).lower().strip() if pd.notna(row[ag_col]) else '',
+                str(row[targeting_col]).lower().strip() if targeting_col and pd.notna(row.get(targeting_col)) else None,
+                str(row[cst_col]).lower().strip() if cst_col and pd.notna(row.get(cst_col)) else None,
+                str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None,
+                int(row.get('Impressions', 0) or 0),
+                int(row.get('Clicks', 0) or 0),
+                float(row.get('Spend', 0) or 0),
+                float(row.get('Sales', 0) or 0),
+                int(row.get('Orders', 0) or 0)
+            ))
+        
+        if not records:
+            return 0
+        
+        # Deduplicate records to avoid "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        # The unique constraint is (client_id, report_date, campaign_name, ad_group_name, targeting, customer_search_term)
+        # These correspond to indices 0, 1, 2, 3, 4, 5 in the tuple
+        seen_keys = set()
+        unique_records = []
+        for r in records:
+            # Create a key tuple for the unique constraint
+            # Treat None as a distinct value, but ensure consistent hashing
+            key = (r[0], r[1], r[2], r[3], r[4], r[5])
+            if key not in seen_keys:
+                seen_keys.add(key)
+                unique_records.append(r)
+        
+        records = unique_records
+        
+        if not records:
+            return 0
+        
+        # Batch insert with ON CONFLICT for deduplication
+        # If same row is uploaded again, update metrics instead of duplicating
+        total_saved = 0
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                for i in range(0, len(records), batch_size):
+                    batch = records[i:i + batch_size]
+                    execute_values(cursor, """
+                        INSERT INTO raw_search_term_data 
+                        (client_id, report_date, campaign_name, ad_group_name, targeting, 
+                         customer_search_term, match_type, impressions, clicks, spend, sales, orders)
+                        VALUES %s
+                        ON CONFLICT (client_id, report_date, campaign_name, ad_group_name, targeting, customer_search_term)
+                        DO UPDATE SET
+                            match_type = EXCLUDED.match_type,
+                            impressions = EXCLUDED.impressions,
+                            clicks = EXCLUDED.clicks,
+                            spend = EXCLUDED.spend,
+                            sales = EXCLUDED.sales,
+                            orders = EXCLUDED.orders,
+                            uploaded_at = CURRENT_TIMESTAMP
+                    """, batch)
+                    total_saved += len(batch)
+        
+        print(f"RAW_SAVE: Upserted {total_saved} daily rows to raw_search_term_data for {client_id}")
+        return total_saved
+    
+    def reaggregate_target_stats(self, client_id: str, week_starts: List[str] = None) -> int:
+        """
+        Re-aggregate target_stats from raw_search_term_data for given weeks.
+        
+        This ensures partial week uploads are correctly combined:
+        - Upload Mon-Wed (Batch 1) → raw table has 3 rows
+        - Upload Thu-Sun (Batch 2) → raw table has 6 rows
+        - Reaggregate → target_stats has 1 row with SUM of all 6 days
+        
+        Args:
+            client_id: Account identifier
+            week_starts: Optional list of week start dates (Monday) to reaggregate.
+                        If None, determines weeks from raw_search_term_data.
+        
+        Returns:
+            Number of rows upserted in target_stats
+        """
+        # Step 1: Determine affected weeks if not provided
+        if week_starts is None:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT DISTINCT date_trunc('week', report_date)::date as week_start
+                        FROM raw_search_term_data
+                        WHERE client_id = %s
+                        ORDER BY week_start DESC
+                    """, (client_id,))
+                    week_starts = [row['week_start'].isoformat() for row in cursor.fetchall()]
+        
+        if not week_starts:
+            return 0
+        
+        # Step 2: Delete existing target_stats for these weeks
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                for week_start in week_starts:
+                    cursor.execute("""
+                        DELETE FROM target_stats 
+                        WHERE client_id = %s AND start_date = %s
+                    """, (client_id, week_start))
+        
+        # Step 3: Aggregate from raw and insert into target_stats
+        total_upserted = 0
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                for week_start in week_starts:
+                    cursor.execute("""
+                        INSERT INTO target_stats 
+                        (client_id, start_date, end_date, campaign_name, ad_group_name, target_text, 
+                         customer_search_term, match_type, spend, sales, orders, clicks, impressions)
+                        SELECT 
+                            client_id,
+                            date_trunc('week', report_date)::date as start_date,
+                            MAX(report_date)::date as end_date,
+                            campaign_name,
+                            ad_group_name,
+                            COALESCE(targeting, customer_search_term, '-') as target_text,
+                            customer_search_term,
+                            match_type,
+                            SUM(spend) as spend,
+                            SUM(sales) as sales,
+                            SUM(orders) as orders,
+                            SUM(clicks) as clicks,
+                            SUM(impressions) as impressions
+                        FROM raw_search_term_data
+                        WHERE client_id = %s 
+                          AND date_trunc('week', report_date)::date = %s
+                        GROUP BY 
+                            client_id, 
+                            date_trunc('week', report_date)::date,
+                            campaign_name, 
+                            ad_group_name, 
+                            targeting,
+                            customer_search_term,
+                            match_type
+                        ON CONFLICT (client_id, start_date, campaign_name, ad_group_name, target_text, customer_search_term, match_type)
+                        DO UPDATE SET
+                            end_date = EXCLUDED.end_date,
+                            spend = EXCLUDED.spend,
+                            sales = EXCLUDED.sales,
+                            orders = EXCLUDED.orders,
+                            clicks = EXCLUDED.clicks,
+                            impressions = EXCLUDED.impressions,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (client_id, week_start))
+                    total_upserted += cursor.rowcount
+        
+        print(f"REAGG: Aggregated {total_upserted} weekly rows from raw_search_term_data to target_stats for {client_id}")
+        return total_upserted
+
+
+    def get_all_weekly_stats(self) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT * FROM weekly_stats ORDER BY start_date DESC")
+                return cursor.fetchall()
+    
+    def get_stats_by_client(self, client_id: str) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT * FROM weekly_stats WHERE client_id = %s ORDER BY start_date DESC", (client_id,))
+                return cursor.fetchall()
+    
+    def get_latest_raw_data_date(self, client_id: str) -> Optional[date]:
+        """
+        Get the actual latest date from raw_search_term_data.
+        This is the TRUE latest date of uploaded data, NOT the week start_date.
+
+        Use this for maturity calculations to avoid the week-aggregation offset.
+        E.g., if data covers Jan 12-17, this returns Jan 17
+              (not Jan 12 which is the week start_date in target_stats)
+        """
+        import time as _time
+        if not hasattr(PostgresManager, '_lrd_cache'):
+            PostgresManager._lrd_cache = {}
+        cached = PostgresManager._lrd_cache.get(client_id)
+        if cached:
+            ts, val = cached
+            if _time.time() - ts < 300:
+                return val
+
+        result = None
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT MAX(report_date) as latest_date
+                    FROM raw_search_term_data
+                    WHERE client_id = %s
+                """, (client_id,))
+                row = cursor.fetchone()
+                if row and row['latest_date']:
+                    result = row['latest_date']
+
+        PostgresManager._lrd_cache[client_id] = (_time.time(), result)
+        return result
+
+    def get_target_stats_by_account(self, account_id: str, limit: int = 50000) -> pd.DataFrame:
+        with self._get_connection() as conn:
+            query = "SELECT * FROM target_stats WHERE client_id = %s ORDER BY start_date DESC LIMIT %s"
+            return pd.read_sql_query(query, conn, params=(account_id, limit))
+
+    # @st.cache_data(ttl=300)  <-- Can't use decorator on method easily without refactoring self. 
+    # Instead, we will implement a direct fetch with optional streamlit caching at the call site or 
+    # simpler: just remove the custom cache for now to force fresh data until we move this to a helper.
+    # Actually, for this specific large query, let's just disable the broken custom cache.
+    
+    @retry_on_connection_error()
+    def get_target_stats_df(
+        self,
+        client_id: str = 'default_client',
+        start_date=None,
+    ) -> pd.DataFrame:
+        """Get target stats, optionally filtered to a start_date.
+
+        Pass start_date to avoid fetching the entire history when only a
+        recent window is needed (e.g. the homepage).  Results are cached
+        in-process for 5 minutes; the cache key includes client_id + start_date
+        so different callers don't collide.
+        """
+        import time as _time
+
+        # —— In-process TTL cache ——
+        if not hasattr(PostgresManager, '_ts_cache'):
+            PostgresManager._ts_cache = {}   # {key: (ts, df)}
+        cache_key = f"{client_id}|{start_date}"
+        cached = PostgresManager._ts_cache.get(cache_key)
+        if cached:
+            ts, df = cached
+            if _time.time() - ts < 300:   # 5-minute TTL
+                return df
+
+        date_filter = "AND start_date >= %s" if start_date else ""
+        params = (client_id, start_date) if start_date else (client_id,)
+
+        with self._get_connection() as conn:
+            query = f"""
+                SELECT
+                    start_date as "Date",
+                    campaign_name as "Campaign Name",
+                    ad_group_name as "Ad Group Name",
+                    target_text as "Targeting",
+                    customer_search_term as "Customer Search Term",
+                    match_type as "Match Type",
+                    spend as "Spend",
+                    sales as "Sales",
+                    orders as "Orders",
+                    clicks as "Clicks",
+                    impressions as "Impressions"
+                FROM target_stats
+                WHERE client_id = %s
+                {date_filter}
+                ORDER BY start_date DESC
+            """
+            df = pd.read_sql(query, conn, params=params)
+            if not df.empty and 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'])
+
+        PostgresManager._ts_cache[cache_key] = (_time.time(), df)
+        return df
+    
+            
+    def get_stats_by_date_range(self, start_date: date, end_date: date, client_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                if client_id:
+                    cursor.execute("""
+                        SELECT * FROM weekly_stats 
+                        WHERE start_date >= %s AND start_date <= %s AND client_id = %s
+                        ORDER BY start_date DESC
+                    """, (start_date, end_date, client_id))
+                else:
+                    cursor.execute("""
+                        SELECT * FROM weekly_stats 
+                        WHERE start_date >= %s AND start_date <= %s
+                        ORDER BY start_date DESC
+                    """, (start_date, end_date))
+                
+                return cursor.fetchall()
+    
+    def get_unique_clients(self) -> List[str]:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT DISTINCT client_id FROM weekly_stats ORDER BY client_id")
+                return [row['client_id'] for row in cursor.fetchall()]
+
+    def delete_stats_by_client(self, client_id: str) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("DELETE FROM weekly_stats WHERE client_id = %s", (client_id,))
+                rows = cursor.rowcount
+                cursor.execute("DELETE FROM target_stats WHERE client_id = %s", (client_id,))
+                rows += cursor.rowcount
+                cursor.execute("DELETE FROM actions_log WHERE client_id = %s", (client_id,))
+                rows += cursor.rowcount
+                return rows
+
+    def clear_all_stats(self) -> int:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("DELETE FROM weekly_stats")
+                return cursor.rowcount
+
+    def get_connection_status(self) -> tuple[str, str]:
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("SELECT 1")
+            return "Connected (Postgres)", "green"
+        except Exception as e:
+            return f"Error: {str(e)}", "red"
+
+    def get_stats_summary(self) -> Dict[str, Any]:
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        COUNT(*) as total_records,
+                        COUNT(DISTINCT client_id) as unique_clients,
+                        MIN(start_date) as earliest_date,
+                        MAX(start_date) as latest_date,
+                        SUM(spend) as total_spend,
+                        SUM(sales) as total_sales
+                    FROM weekly_stats
+                """)
+                rows = cursor.fetchall() # Fetch all results
+                
+                # Convert to DataFrame
+                df = pd.DataFrame(rows)
+                
+                # Standardize columns to match UI expectations (snake_case -> Title Case)
+                rename_map = {
+                    'date': 'Date',
+                    'campaign_name': 'Campaign Name',
+                    'ad_group_name': 'Ad Group Name', 
+                    'targeting': 'Targeting',
+                    'match_type': 'Match Type',
+                    'impressions': 'Impressions',
+                    'clicks': 'Clicks',
+                    'spend': 'Spend',
+                    'sales': 'Sales',
+                    'orders': 'Orders',
+                    'units': 'Units',
+                    'ctr': 'CTR',
+                    'cpc': 'CPC',
+                    'cvr': 'CVR', 
+                    'roas': 'ROAS',
+                    'acos': 'ACoS',
+                    'customer_search_term': 'Customer Search Term'
+                }
+                df = df.rename(columns=rename_map)
+                
+                # Ensure numerical types
+                num_cols = ['Impressions', 'Clicks', 'Spend', 'Sales', 'Orders', 'Units']
+                for col in num_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                        
+                # Ensure date type
+                if 'Date' in df.columns:
+                    df['Date'] = pd.to_datetime(df['Date'])
+                
+                return df
+
+    def get_latest_raw_data_date(self, client_id: str) -> Optional[date]:
+        """
+        Get the absolute latest date available in the raw data.
+        Prerequisite for accurate maturity calculation on dashboards.
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                # 1. Check raw search term data (primary source for new uploads)
+                cursor.execute("SELECT MAX(report_date) FROM raw_search_term_data WHERE client_id = %s", (client_id,))
+                res = cursor.fetchone()
+                if res and res[0]:
+                    return res[0]
+                
+                # 2. Check target_stats (fallback)
+                cursor.execute("SELECT MAX(start_date) FROM target_stats WHERE client_id = %s", (client_id,))
+                res = cursor.fetchone()
+                if res and res[0]:
+                    return res[0]
+                    
+        return None
+
+    def save_category_mapping(self, df: pd.DataFrame, client_id: str):
+        if df is None or df.empty: return 0
+        
+        sku_col = df.columns[0]
+        cat_col = next((c for c in df.columns if 'category' in c.lower() and 'sub' not in c.lower()), None)
+        sub_col = next((c for c in df.columns if 'sub' in c.lower()), None)
+        
+        data = []
+        for _, row in df.iterrows():
+            data.append((
+                client_id,
+                str(row[sku_col]),
+                str(row[cat_col]) if cat_col and pd.notna(row[cat_col]) else None,
+                str(row[sub_col]) if sub_col and pd.notna(row[sub_col]) else None
+            ))
+            
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                execute_values(cursor, """
+                    INSERT INTO category_mappings (client_id, sku, category, sub_category)
+                    VALUES %s
+                    ON CONFLICT (client_id, sku) DO UPDATE SET
+                        category = EXCLUDED.category,
+                        sub_category = EXCLUDED.sub_category,
+                        updated_at = CURRENT_TIMESTAMP
+                """, data)
+        return len(data)
+
+    def get_category_mappings(self, client_id: str) -> pd.DataFrame:
+        with self._get_connection() as conn:
+            return pd.read_sql("SELECT sku as SKU, category as Category, sub_category as \"Sub-Category\" FROM category_mappings WHERE client_id = %s", conn, params=(client_id,))
+
+    def save_advertised_product_map(self, df: pd.DataFrame, client_id: str):
+        if df is None or df.empty: return 0
+        
+        required = ['Campaign Name', 'Ad Group Name']
+        if not all(c in df.columns for c in required): return 0
+        
+        sku_col = 'SKU' if 'SKU' in df.columns else None
+        asin_col = 'ASIN' if 'ASIN' in df.columns else None
+
+        def _clean_str(value):
+            if value is None or (isinstance(value, float) and pd.isna(value)):
+                return None
+            s = str(value).strip()
+            return s if s else None
+
+        # Build SKU->ASIN fallback map from incoming file
+        fallback_sku_to_asin = {}
+        if sku_col and asin_col:
+            for _, row in df.iterrows():
+                sku_val = _clean_str(row.get(sku_col))
+                asin_val = _clean_str(row.get(asin_col))
+                if sku_val and asin_val:
+                    fallback_sku_to_asin[sku_val] = asin_val.upper()
+
+        # Extend fallback map from existing DB cache for this client
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT sku, asin
+                    FROM advertised_product_cache
+                    WHERE client_id = %s
+                      AND sku IS NOT NULL
+                      AND asin IS NOT NULL
+                """, (client_id,))
+                for rec in cursor.fetchall() or []:
+                    sku_val = _clean_str(rec.get("sku"))
+                    asin_val = _clean_str(rec.get("asin"))
+                    if sku_val and asin_val and sku_val not in fallback_sku_to_asin:
+                        fallback_sku_to_asin[sku_val] = asin_val.upper()
+
+        data = []
+        seen = set()
+        for _, row in df.iterrows():
+            campaign = _clean_str(row.get('Campaign Name'))
+            ad_group = _clean_str(row.get('Ad Group Name'))
+            sku_val = _clean_str(row.get(sku_col)) if sku_col else None
+            asin_val = _clean_str(row.get(asin_col)) if asin_col else None
+
+            # Skip invalid rows; these cannot map inventory intelligence correctly.
+            if not campaign or not ad_group:
+                continue
+            if not sku_val and not asin_val:
+                continue
+
+            if not asin_val and sku_val:
+                asin_val = fallback_sku_to_asin.get(sku_val)
+            if asin_val:
+                asin_val = asin_val.upper()
+
+            dedupe_key = (client_id, campaign, ad_group, sku_val, asin_val)
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+
+            data.append((client_id, campaign, ad_group, sku_val, asin_val))
+
+        if not data:
+            return 0
+
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                execute_values(cursor, """
+                    INSERT INTO advertised_product_cache 
+                    (client_id, campaign_name, ad_group_name, sku, asin)
+                    VALUES %s
+                    ON CONFLICT (client_id, campaign_name, ad_group_name, sku) DO UPDATE SET
+                        asin = EXCLUDED.asin,
+                        updated_at = CURRENT_TIMESTAMP
+                """, data)
+                # Backfill missing ASINs for existing rows using same client+SKU.
+                cursor.execute("""
+                    UPDATE advertised_product_cache apc
+                    SET asin = src.asin,
+                        updated_at = CURRENT_TIMESTAMP
+                    FROM (
+                        SELECT client_id, sku, MAX(asin) AS asin
+                        FROM advertised_product_cache
+                        WHERE client_id = %s
+                          AND sku IS NOT NULL
+                          AND asin IS NOT NULL
+                        GROUP BY client_id, sku
+                    ) src
+                    WHERE apc.client_id = src.client_id
+                      AND apc.sku = src.sku
+                      AND (apc.asin IS NULL OR apc.asin = '')
+                """, (client_id,))
+        return len(data)
+
+    def get_advertised_product_map(self, client_id: str) -> pd.DataFrame:
+        with self._get_connection() as conn:
+            return pd.read_sql("SELECT campaign_name as \"Campaign Name\", ad_group_name as \"Ad Group Name\", sku as SKU, asin as ASIN FROM advertised_product_cache WHERE client_id = %s", conn, params=(client_id,))
+
+    def save_bulk_mapping(self, df: pd.DataFrame, client_id: str):
+        if df is None or df.empty: return 0
+
+        sku_col = next((c for c in df.columns if c.lower() in ['sku', 'msku', 'vendor sku', 'vendor_sku']), None)
+        cid_col = 'CampaignId' if 'CampaignId' in df.columns else None
+        aid_col = 'AdGroupId' if 'AdGroupId' in df.columns else None
+        kwid_col = 'KeywordId' if 'KeywordId' in df.columns else None
+        tid_col = 'TargetingId' if 'TargetingId' in df.columns else None
+
+        # CRITICAL FIX: Use "Keyword Text" (not "Customer Search Term") for keywords
+        kw_text_col = next((c for c in df.columns if c.lower() in ['keyword text']), None)
+        tgt_expr_col = next((c for c in df.columns if c.lower() in ['product targeting expression', 'targetingexpression']), None)
+        mt_col = 'Match Type' if 'Match Type' in df.columns else None
+
+        data = []
+        for _, row in df.iterrows():
+            if 'Campaign Name' not in row: continue
+
+            # Get match type to determine if this is a keyword or product targeting row
+            match_type = str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None
+
+            # CRITICAL: Use keyword_text for keyword match types, targeting_expression for auto/PT match types
+            keyword_text = None
+            targeting_expression = None
+
+            if match_type in ['broad', 'phrase', 'exact', 'negativeexact', 'negativephrase']:
+                # This is a KEYWORD row - use "Keyword Text" column
+                keyword_text = str(row[kw_text_col]) if kw_text_col and pd.notna(row.get(kw_text_col)) else None
+            elif match_type in ['close-match', 'loose-match', 'substitutes', 'auto', 'closematch', 'loosematch']:
+                # This is a PRODUCT TARGETING row - use "Product Targeting Expression" column
+                targeting_expression = str(row[tgt_expr_col]) if tgt_expr_col and pd.notna(row.get(tgt_expr_col)) else None
+            else:
+                # Fallback: if match_type is unknown, try both
+                keyword_text = str(row[kw_text_col]) if kw_text_col and pd.notna(row.get(kw_text_col)) else None
+                targeting_expression = str(row[tgt_expr_col]) if tgt_expr_col and pd.notna(row.get(tgt_expr_col)) else None
+
+            data.append((
+                client_id,
+                str(row['Campaign Name']),
+                str(row[cid_col]) if cid_col and pd.notna(row.get(cid_col)) else None,
+                str(row.get('Ad Group Name')) if 'Ad Group Name' in df.columns and pd.notna(row.get('Ad Group Name')) else None,
+                str(row[aid_col]) if aid_col and pd.notna(row.get(aid_col)) else None,
+                keyword_text,
+                str(row[kwid_col]) if kwid_col and pd.notna(row.get(kwid_col)) else None,
+                targeting_expression,
+                str(row[tid_col]) if tid_col and pd.notna(row.get(tid_col)) else None,
+                str(row[sku_col]) if sku_col and pd.notna(row.get(sku_col)) else None,
+                match_type
+            ))
+            
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                execute_values(cursor, """
+                    INSERT INTO bulk_mappings 
+                    (client_id, campaign_name, campaign_id, ad_group_name, ad_group_id, 
+                        keyword_text, keyword_id, targeting_expression, targeting_id, sku, match_type)
+                    VALUES %s
+                    ON CONFLICT (client_id, campaign_name, ad_group_name, keyword_text, targeting_expression) DO UPDATE SET
+                        campaign_id = EXCLUDED.campaign_id,
+                        ad_group_id = EXCLUDED.ad_group_id,
+                        keyword_id = EXCLUDED.keyword_id,
+                        targeting_id = EXCLUDED.targeting_id,
+                        sku = EXCLUDED.sku,
+                        match_type = EXCLUDED.match_type,
+                        updated_at = CURRENT_TIMESTAMP
+                """, data)
+        return len(data)
+
+    def get_bulk_mapping(self, client_id: str) -> pd.DataFrame:
+        with self._get_connection() as conn:
+            return pd.read_sql("""
+                SELECT 
+                    campaign_name as "Campaign Name", 
+                    campaign_id as "CampaignId", 
+                    ad_group_name as "Ad Group Name", 
+                    ad_group_id as "AdGroupId",
+                    keyword_text as "Customer Search Term",
+                    keyword_id as "KeywordId",
+                    targeting_expression as "Product Targeting Expression",
+                    targeting_id as "TargetingId",
+                    sku as "SKU",
+                    match_type as "Match Type"
+                FROM bulk_mappings 
+                WHERE client_id = %s
+            """, conn, params=(client_id,))
+
+    def get_commerce_metrics_by_target(self, client_id: str) -> pd.DataFrame:
+        """
+        Fetch V2.1 Commerce Intelligence metrics for a client's targets.
+        Used to calculate flags like INVENTORY_RISK, CANNIBALIZE_RISK, HALO_ACTIVE.
+        """
+        with self._get_connection() as conn:
+            try:
+                return pd.read_sql_query("""
+                    SELECT DISTINCT ON (apc.campaign_name, apc.ad_group_name, COALESCE(apc.asin, cm.asin, apc.sku, cm.sku))
+                        apc.campaign_name,
+                        apc.ad_group_name,
+                        COALESCE(apc.sku, cm.sku) AS sku,
+                        COALESCE(apc.asin, cm.asin) AS asin,
+                        cm.product_lifecycle,
+                        cm.ordered_revenue,
+                        cm.units_ordered,
+                        cm.sessions,
+                        cm.organic_cvr,
+                        cm.days_of_supply,
+                        cm.fulfillable_quantity,
+                        cm.total_inventory
+                    FROM advertised_product_cache apc
+                    JOIN commerce_metrics cm 
+                        ON apc.client_id = cm.client_id
+                       AND (
+                            (apc.asin IS NOT NULL AND apc.asin = cm.asin)
+                            OR (apc.asin IS NULL AND apc.sku IS NOT NULL AND apc.sku = cm.sku)
+                       )
+                    WHERE apc.client_id = %s
+                    ORDER BY apc.campaign_name, apc.ad_group_name, COALESCE(apc.asin, cm.asin, apc.sku, cm.sku)
+                """, conn, params=(client_id,))
+            except Exception as e:
+                print(f"Failed to fetch commerce metrics: {e}")
+                return pd.DataFrame()
+
+    def has_active_spapi_integration(self, client_id: str) -> bool:
+        """
+        Return True only when this client has at least one active SP-API link.
+        """
+        with self._get_connection() as conn:
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM sc_raw.spapi_account_links
+                            WHERE public_client_id = %s
+                              AND is_active = TRUE
+                        )
+                        """,
+                        (client_id,),
+                    )
+                    row = cursor.fetchone()
+                    return bool(row and row[0])
+            except (psycopg2.errors.UndefinedTable, psycopg2.ProgrammingError):
+                return False
+            except Exception as e:
+                print(f"Failed to check SP-API integration for {client_id}: {e}")
+                return False
+
+    def log_action_batch(self, actions: List[Dict[str, Any]], client_id: str, batch_id: Optional[str] = None, action_date: Optional[str] = None) -> int:
+        if not actions: return 0
+        if batch_id is None: batch_id = str(uuid.uuid4())[:8]
+        if action_date:
+            date_str = str(action_date)[:10] if action_date else datetime.now().isoformat()
+        else:
+            date_str = datetime.now().isoformat()
+            
+        data = []
+        # Track unique constraint keys to prevent duplicates in same batch
+        seen_keys = set()
+        
+        for action in actions:
+            # Unique key matches ON CONFLICT constraint
+            unique_key = (
+                client_id,
+                date_str[:10],  # action_date
+                action.get('target_text', ''),
+                action.get('action_type', 'UNKNOWN'),
+                action.get('campaign_name', '')
+            )
+            
+            # Skip if we've already seen this combination
+            if unique_key in seen_keys:
+                continue
+            seen_keys.add(unique_key)
+            
+            data.append((
+                date_str,
+                client_id,
+                batch_id,
+                action.get('entity_name', ''),
+                action.get('action_type', 'UNKNOWN'),
+                str(action.get('old_value', '')),
+                str(action.get('new_value', '')),
+                action.get('reason', ''),
+                action.get('campaign_name', ''),
+                action.get('ad_group_name', ''),
+                action.get('target_text', ''),
+                action.get('match_type', ''),
+                action.get('intelligence_flags', ''),
+                action.get('winner_source_campaign'),
+                action.get('new_campaign_name'),
+                action.get('before_match_type'),
+                action.get('after_match_type')
+            ))
+        
+        if not data:
+            return 0
+            
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                execute_values(cursor, """
+                    INSERT INTO actions_log 
+                    (action_date, client_id, batch_id, entity_name, action_type, old_value, new_value, 
+                     reason, campaign_name, ad_group_name, target_text, match_type, intelligence_flags,
+                     winner_source_campaign, new_campaign_name, before_match_type, after_match_type)
+                    VALUES %s
+                    ON CONFLICT (client_id, action_date, target_text, action_type, campaign_name) 
+                    DO UPDATE SET
+                        batch_id = EXCLUDED.batch_id,
+                        entity_name = EXCLUDED.entity_name,
+                        old_value = EXCLUDED.old_value,
+                        new_value = EXCLUDED.new_value,
+                        reason = EXCLUDED.reason,
+                        campaign_name = EXCLUDED.campaign_name,
+                        ad_group_name = EXCLUDED.ad_group_name,
+                        match_type = EXCLUDED.match_type,
+                        intelligence_flags = EXCLUDED.intelligence_flags,
+                        winner_source_campaign = EXCLUDED.winner_source_campaign,
+                        new_campaign_name = EXCLUDED.new_campaign_name,
+                        before_match_type = EXCLUDED.before_match_type,
+                        after_match_type = EXCLUDED.after_match_type
+                """, data)
+        return len(data)
+
+    def get_target_14d_roas(self, client_id: str) -> pd.DataFrame:
+        """
+        Fetch the 14-day rolling average ROAS for all targets for a client.
+        Formula: SUM(sales last 14d) / SUM(spend last 14d)
+        """
+        query = """
+        WITH latest_data AS (
+            SELECT MAX(start_date) as max_date 
+            FROM target_stats 
+            WHERE client_id = %(client_id)s
+        )
+        SELECT 
+            campaign_name as "Campaign Name",
+            ad_group_name as "Ad Group Name",
+            COALESCE(target_text, '') as "Targeting",
+            SUM(sales) as "14d_Sales",
+            SUM(spend) as "14d_Spend",
+            CASE 
+                WHEN SUM(spend) > 0 THEN SUM(sales) / SUM(spend)
+                ELSE 0.0 
+            END as "14d_avg_ROAS"
+        FROM target_stats
+        CROSS JOIN latest_data
+        WHERE client_id = %(client_id)s
+          AND start_date >= (latest_data.max_date - INTERVAL '13 days') -- 14 days inclusive
+        GROUP BY 1, 2, 3
+        """
+        with self._get_connection() as conn:
+            return pd.read_sql(query, conn, params={'client_id': client_id})
+
+    def get_actions_by_client(self, client_id: str, limit: int = 100) -> list:
+        """Get recent actions for a client — used by Intelligence Log."""
+        query = """
+            SELECT *
+            FROM actions_log
+            WHERE client_id = %(client_id)s
+            ORDER BY action_date DESC
+            LIMIT %(limit)s
+        """
+        with self._get_connection() as conn:
+            df = pd.read_sql(query, conn, params={"client_id": client_id, "limit": limit})
+        return df.to_dict("records")
+
+    def get_recent_action_dates(self, client_id: str) -> pd.DataFrame:
+        """Fetch the most recent BID_CHANGE action date for each target to enforce cooldown."""
+        query = """
+        SELECT 
+            campaign_name as "Campaign Name",
+            ad_group_name as "Ad Group Name",
+            COALESCE(target_text, '') as "Targeting",
+            MAX(action_date) as last_action_date
+        FROM actions_log
+        WHERE client_id = %(client_id)s
+          AND action_type = 'BID_CHANGE'
+        GROUP BY 1, 2, 3
+        """
+        with self._get_connection() as conn:
+            return pd.read_sql(query, conn, params={'client_id': client_id})
+
+    def record_action_outcomes(self, client_id: str) -> int:
+        """
+        Evaluate and label BID_CHANGE actions that matured in the 14-day window.
+        - Evaluates actions aged 17 to 47 days.
+        - Labels improvement, worsening, or neutral.
+        
+        NOTE FOR FUTURE ML OPS (V3):
+        Raw outcome labels reflect absolute ROAS delta. Before ML 
+        training, labels must be market-adjusted by comparing target ROAS 
+        delta against account baseline drift for the same period. Raw 
+        worsened rate of ~43% is consistent across all action types 
+        including holds, confirming market-driven baseline rather than 
+        decision-caused harm.
+        """
+        
+        # 1. Ask for all action impacts for this client using the standard 14/14 window
+        impact_df = self.get_action_impact(client_id, before_days=14, after_days=14)
+        if impact_df.empty:
+            return 0
+            
+        # 2. Filter down to eligible BID_CHANGE actions
+        # Must be between 17 and 47 days old, and not yet evaluated
+        query = """
+        SELECT action_date, target_text, campaign_name
+        FROM actions_log
+        WHERE client_id = %(client_id)s
+          AND action_type = 'BID_CHANGE'
+          AND outcome_label IS NULL
+          AND action_date <= CURRENT_DATE - INTERVAL '17 days'
+          AND action_date >= CURRENT_DATE - INTERVAL '47 days'
+        """
+        with self._get_connection() as conn:
+            eligible_actions = pd.read_sql(query, conn, params={'client_id': client_id})
+            
+        if eligible_actions.empty:
+            return 0
+
+        # Create a unique key for matching
+        eligible_actions['match_key'] = (
+            eligible_actions['action_date'].astype(str) + "|" + 
+            eligible_actions['campaign_name'].str.lower() + "|" + 
+            eligible_actions['target_text'].str.lower()
+        )
+        
+        impact_df['match_key'] = (
+            impact_df['action_date'].astype(str) + "|" + 
+            impact_df['campaign_name'].str.lower() + "|" + 
+            impact_df['target_text'].str.lower()
+        )
+        
+        # 3. Calculate metrics and build the update list
+        updates = []
+        for _, row in impact_df.iterrows():
+            if row['match_key'] not in eligible_actions['match_key'].values:
+                continue
+                
+            b_spend = float(row.get('before_spend', 0))
+            b_sales = float(row.get('before_sales', 0))
+            a_spend = float(row.get('observed_after_spend', 0))
+            a_sales = float(row.get('observed_after_sales', 0))
+            
+            before_roas = b_sales / b_spend if b_spend > 0 else 0
+            after_roas = a_sales / a_spend if a_spend > 0 else 0
+            roas_delta = after_roas - before_roas
+            
+            if roas_delta > 0.1:
+                label = 'improved'
+            elif roas_delta < -0.1:
+                label = 'worsened'
+            else:
+                label = 'neutral'
+                
+            updates.append((
+                roas_delta,
+                label,
+                client_id,
+                row['action_date'],
+                row['target_text'],
+                row['campaign_name']
+            ))
+            
+        if not updates:
+            return 0
+            
+        # 4. Write back to actions_log
+        update_query = """
+            UPDATE actions_log 
+            SET 
+                outcome_roas_delta = %s,
+                outcome_label = %s,
+                outcome_evaluated_at = CURRENT_TIMESTAMP
+            WHERE client_id = %s
+              AND action_date = %s
+              AND target_text = %s
+              AND campaign_name = %s
+              AND action_type = 'BID_CHANGE'
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cursor:
+                execute_batch(cursor, update_query, updates)
+                return cursor.rowcount
+
+    def delete_action_batch(self, client_id: str, batch_id: str) -> int:
+        """Delete a specific action batch (for undo functionality)."""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    "DELETE FROM actions_log WHERE client_id = %s AND batch_id = %s",
+                    (client_id, batch_id)
+                )
+                return cursor.rowcount
+
+    def clear_todays_actions(self, client_id: str) -> int:
+        """Delete all actions logged today for a client."""
+        from datetime import date
+        today = date.today().isoformat()
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    "DELETE FROM actions_log WHERE client_id = %s AND DATE(action_date) = %s",
+                    (client_id, today)
+                )
+                return cursor.rowcount
+
+
+    def create_account(self, account_id: str, account_name: str, account_type: str = 'brand', metadata: dict = None, organization_id: str = None) -> bool:
+        import json
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    metadata_json = json.dumps(metadata) if metadata else '{}'
+                    cursor.execute("""
+                        INSERT INTO accounts (account_id, account_name, account_type, metadata, organization_id)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (account_id, account_name, account_type, metadata_json, organization_id))
+                    return True
+        except psycopg2.IntegrityError:
+            return False
+
+    @retry_on_connection_error()
+    def get_all_accounts(self, organization_id: str = None) -> List[tuple]:
+        """Get all accounts with caching."""
+        cache_key = 'all_accounts'
+        # cached = _query_cache.get(cache_key)
+        # if cached is not None:
+        #     return cached
+        
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                if organization_id:
+                     cursor.execute("SELECT account_id, account_name, account_type FROM accounts WHERE organization_id = %s ORDER BY account_name", (organization_id,))
+                else:
+                    cursor.execute("SELECT account_id, account_name, account_type FROM accounts ORDER BY account_name")
+                
+                # Strip whitespace from IDs to prevent matching issues
+                result = [(str(row['account_id']).strip(), row['account_name'], row['account_type']) for row in cursor.fetchall()]
+        
+        # _query_cache.set(cache_key, result)
+        return result
+
+    def get_account(self, account_id: str) -> Optional[Dict[str, Any]]:
+        import json
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("SELECT * FROM accounts WHERE account_id = %s", (account_id,))
+                row = cursor.fetchone()
+                if row:
+                    result = dict(row)
+                    if result.get('metadata'):
+                        try:
+                            result['metadata'] = json.loads(result['metadata'])
+                        except:
+                            result['metadata'] = {}
+                    return result
+                return None
+
+    # ==========================================
+    # ACCOUNT HEALTH METHODS
+    # ==========================================
+    
+    def save_account_health(self, client_id: str, metrics: Dict[str, Any]) -> bool:
+        """Save or update account health metrics."""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        INSERT INTO account_health_metrics 
+                        (client_id, health_score, roas_score, waste_score, cvr_score,
+                         waste_ratio, wasted_spend, current_roas, current_acos, cvr,
+                         total_spend, total_sales, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (client_id) DO UPDATE SET
+                            health_score = EXCLUDED.health_score,
+                            roas_score = EXCLUDED.roas_score,
+                            waste_score = EXCLUDED.waste_score,
+                            cvr_score = EXCLUDED.cvr_score,
+                            waste_ratio = EXCLUDED.waste_ratio,
+                            wasted_spend = EXCLUDED.wasted_spend,
+                            current_roas = EXCLUDED.current_roas,
+                            current_acos = EXCLUDED.current_acos,
+                            cvr = EXCLUDED.cvr,
+                            total_spend = EXCLUDED.total_spend,
+                            total_sales = EXCLUDED.total_sales,
+                            updated_at = CURRENT_TIMESTAMP
+                    """, (
+                        client_id,
+                        float(metrics.get('health_score', 0)),
+                        float(metrics.get('roas_score', 0)),
+                        float(metrics.get('efficiency_score', metrics.get('waste_score', 0))),
+                        float(metrics.get('cvr_score', 0)),
+                        float(metrics.get('waste_ratio', 0)),
+                        float(metrics.get('wasted_spend', 0)),
+                        float(metrics.get('current_roas', 0)),
+                        float(metrics.get('current_acos', 0)),
+                        float(metrics.get('cvr', 0)),
+                        float(metrics.get('total_spend', 0)),
+                        float(metrics.get('total_sales', 0))
+                    ))
+            return True
+        except Exception as e:
+            logging.error(f"Failed to save account health: {e}")
+            return False
+    
+    def get_account_health(self, client_id: str) -> Optional[Dict[str, Any]]:
+        """Get account health metrics from database."""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    "SELECT * FROM account_health_metrics WHERE client_id = %s",
+                    (client_id,)
+                )
+                row = cursor.fetchone()
+                return dict(row) if row else None
+
+    @retry_on_connection_error()
+    def get_available_dates(self, client_id: str) -> List[str]:
+        """Get list of unique action dates for a client with caching."""
+        cache_key = f'dates_{client_id}'
+        # cached = _query_cache.get(cache_key)
+        # if cached is not None:
+        #     return cached
+        
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT DISTINCT start_date
+                    FROM target_stats 
+                    WHERE client_id = %s 
+                    ORDER BY start_date DESC
+                """, (client_id,))
+                result = [str(row['start_date']) for row in cursor.fetchall()]
+        
+        # _query_cache.set(cache_key, result)
+        return result
+
+    # ==========================================
+    # IMPACT MODEL v3.3: HELPER FUNCTIONS
+    # ==========================================
+
+    def _calculate_market_shift(self, df: pd.DataFrame) -> float:
+        """
+        Calculate account-level SPC shift for market adjustment.
+
+        Args:
+            df: DataFrame with before/after metrics
+
+        Returns:
+            market_shift: Ratio of account_spc_after / account_spc_before
+                         Clamped to MARKET_SHIFT_BOUNDS to prevent extreme adjustments
+        """
+        import numpy as np
+
+        total_before_sales = df['before_sales'].sum()
+        total_before_clicks = df['before_clicks'].sum()
+        total_after_sales = df['observed_after_sales'].sum()
+        total_after_clicks = df['after_clicks'].sum()
+
+        account_spc_before = total_before_sales / total_before_clicks if total_before_clicks > 0 else 0
+        account_spc_after = total_after_sales / total_after_clicks if total_after_clicks > 0 else 0
+
+        if account_spc_before > 0:
+            market_shift = account_spc_after / account_spc_before
+        else:
+            market_shift = 1.0
+
+        # Clamp to bounds to prevent extreme adjustments
+        market_shift = np.clip(market_shift, *MARKET_SHIFT_BOUNDS)
+
+        return market_shift
+
+    def _calculate_v33_impact_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Calculate v3.3 layered counterfactual impact with market and scale adjustments.
+
+        This implements the v3.3 specification:
+        1. Market Shift: Account-level SPC change applied to all targets
+        2. Scale Factor: Diminishing returns for scale-up scenarios
+        3. Asymmetric Application: Adjusts penalties fairly, doesn't inflate wins
+        4. Harvest Integration: Applies 0.85x efficiency factor at DB layer
+
+        Args:
+            df: DataFrame with required columns (before_clicks, after_clicks, etc.)
+
+        Returns:
+            DataFrame with added columns:
+            - market_shift: Account-level SPC change factor
+            - scale_factor: Per-row diminishing returns factor
+            - click_ratio: After clicks / before clicks
+            - impact_linear: v3.2 linear impact (for comparison)
+            - expected_sales_linear: v3.2 expected sales
+            - expected_sales_layered: v3.3 expected sales (market + scale)
+            - expected_sales_market: v3.3 expected sales (market only)
+            - impact_v33: v3.3 adjusted impact (unweighted)
+            - final_impact_v33: v3.3 impact × confidence_weight
+            - expected_sales_v33: Which expected sales was used
+        """
+        import numpy as np
+
+        df = df.copy()
+
+        # =========================================================
+        # STEP 1: Calculate click ratio
+        # =========================================================
+        df['click_ratio'] = df['after_clicks'] / df['before_clicks'].replace(0, np.nan)
+        df['click_ratio'] = df['click_ratio'].replace([np.inf, -np.inf], np.nan).fillna(1.0)
+
+        # =========================================================
+        # STEP 2: Calculate MARKET SHIFT (account-level)
+        # =========================================================
+        market_shift = self._calculate_market_shift(df)
+        df['market_shift'] = market_shift
+
+        # =========================================================
+        # STEP 3: Calculate SCALE FACTOR (per-row)
+        # =========================================================
+        # Diminishing returns: 1 / (click_ratio ^ α) for scale-up
+        # No adjustment for scale-down (ratio <= 1)
+        df['scale_factor'] = np.where(
+            df['click_ratio'] > SCALE_THRESHOLD,
+            1 / (df['click_ratio'] ** SCALE_ALPHA),
+            1.0
+        )
+        # Clamp to bounds
+        df['scale_factor'] = np.clip(df['scale_factor'], *SCALE_FACTOR_BOUNDS)
+
+        # =========================================================
+        # STEP 4: Calculate LINEAR impact (v3.2 baseline)
+        # =========================================================
+        # This is already calculated as 'decision_impact' in the main flow
+        # We'll rename it for clarity
+        df['impact_linear'] = df['decision_impact'].copy()
+        df['expected_sales_linear'] = df['expected_sales'].copy()
+
+        # =========================================================
+        # STEP 5: Calculate LAYERED expected sales
+        # =========================================================
+        # For scale-up: apply both market AND scale adjustment
+        # For scale-down: apply only market adjustment
+        df['expected_sales_layered'] = np.where(
+            df['click_ratio'] > SCALE_THRESHOLD,
+            df['after_clicks'] * df['spc_before'] * market_shift * df['scale_factor'],
+            df['after_clicks'] * df['spc_before'] * market_shift
+        )
+
+        # Market-only expected (for scale-down cases)
+        df['expected_sales_market'] = df['after_clicks'] * df['spc_before'] * market_shift
+
+        # Calculate impacts
+        df['impact_layered'] = df['observed_after_sales'] - df['expected_sales_layered']
+        df['impact_market'] = df['observed_after_sales'] - df['expected_sales_market']
+
+        # =========================================================
+        # STEP 6: Apply HARVEST 0.85x factor at DB layer
+        # =========================================================
+        # Move this from dashboard to database for single source of truth
+        is_harvest = df['action_type'] == 'HARVEST'
+        df.loc[is_harvest, 'expected_sales_layered'] = df.loc[is_harvest, 'expected_sales_layered'] * HARVEST_EFFICIENCY_FACTOR
+        df.loc[is_harvest, 'expected_sales_market'] = df.loc[is_harvest, 'expected_sales_market'] * HARVEST_EFFICIENCY_FACTOR
+        df.loc[is_harvest, 'expected_sales_linear'] = df.loc[is_harvest, 'expected_sales_linear'] * HARVEST_EFFICIENCY_FACTOR
+
+        # Recalculate impacts with harvest factor
+        df.loc[is_harvest, 'impact_layered'] = df.loc[is_harvest, 'observed_after_sales'] - df.loc[is_harvest, 'expected_sales_layered']
+        df.loc[is_harvest, 'impact_market'] = df.loc[is_harvest, 'observed_after_sales'] - df.loc[is_harvest, 'expected_sales_market']
+        df.loc[is_harvest, 'impact_linear'] = df.loc[is_harvest, 'observed_after_sales'] - df.loc[is_harvest, 'expected_sales_linear']
+
+        # =========================================================
+        # STEP 7: Apply ASYMMETRIC market-adjusted counterfactual (v3.3.2 fix)
+        # =========================================================
+        # CRITICAL: Apply v3.3 adjustments ONLY to negative impacts (gaps/penalties)
+        # Positive impacts (wins) use v3.2 linear baseline (no inflation)
+        #
+        # Asymmetric Rules:
+        # 1. IF impact_linear >= 0 (win) → use impact_linear (no change)
+        # 2. ELSE IF scale-up (click_ratio > 1) → use impact_layered (market + scale)
+        # 3. ELSE IF scale-down → use impact_market (market only)
+
+        df['impact_v33'] = np.where(
+            df['impact_linear'] >= 0,
+            # WINS: No adjustment (v3.2 baseline)
+            df['impact_linear'],
+            # GAPS/PENALTIES: Apply market + scale adjustments
+            np.where(
+                df['click_ratio'] > SCALE_THRESHOLD,
+                # SCALE-UP: Layered adjustment (market + scale factor)
+                df['impact_layered'],
+                # SCALE-DOWN: Market adjustment only
+                df['impact_market']
+            )
+        )
+
+        # =========================================================
+        # STEP 8: Handle special action types (NEGATIVE, Spend Eliminated)
+        # =========================================================
+        # These use impact_score directly, not counterfactual
+        # Preserve existing behavior from v3.2
+        is_spend_eliminated = df['validation_status'].fillna('').str.contains('Spend Eliminated|Confirmed blocked', regex=True)
+        is_special_type = df['action_type'].isin(['NEGATIVE', 'NEGATIVE_ADD', 'HARVEST'])
+        special_types_mask = is_special_type | is_spend_eliminated
+
+        # For special types, use the original impact_score (which is already in impact_linear)
+        df.loc[special_types_mask, 'impact_v33'] = df.loc[special_types_mask, 'impact_linear']
+
+        # =========================================================
+        # STEP 9: Apply confidence weighting
+        # =========================================================
+        # Confidence weight is already calculated in main flow
+        df['final_impact_v33'] = df['impact_v33'] * df['confidence_weight']
+
+        # =========================================================
+        # STEP 10: Store which expected sales was used
+        # =========================================================
+        df['expected_sales_v33'] = np.where(
+            df['impact_linear'] > 0,
+            df['expected_sales_linear'],  # Used linear for positive
+            np.where(
+                df['click_ratio'] > SCALE_THRESHOLD,
+                df['expected_sales_layered'],  # Used layered for scale-up negative
+                df['expected_sales_market']     # Used market for scale-down negative
+            )
+        )
+
+        # Override for special types
+        df.loc[special_types_mask, 'expected_sales_v33'] = df.loc[special_types_mask, 'expected_sales_linear']
+
+        return df
+
+    @retry_on_connection_error()
+    def get_action_impact(self, client_id: str, before_days: int = 14, after_days: int = 14) -> pd.DataFrame:
+        """
+        Calculate impact using rule-based expected outcomes with caching.
+        
+        Uses multi-horizon measurement:
+        - before_days: Fixed at 14 days (baseline period)
+        - after_days: 14, 30, or 60 days (measurement horizon)
+        """
+        cache_key = f'impact_{client_id}_{before_days}_{after_days}'
+        # Cache check removed
+        # cached = _query_cache.get(cache_key)
+        # if cached is not None:
+        #    return cached
+
+        # Calculate intervals based on before_days and after_days
+        after_minus_1 = after_days - 1
+        
+        # Original LATERAL join query - accurate but slower
+        # Indexes added for performance: idx_ts_client_campaign, idx_ts_client_target, idx_ts_client_cst
+        query = """
+            WITH aggregated_actions AS (
+                -- Group daily actions into weekly buckets
+                SELECT 
+                    LOWER(target_text) as target_lower,
+                    CASE 
+                        WHEN LOWER(target_text) LIKE 'asin=%%' THEN 
+                            LOWER(REPLACE(REPLACE(target_text, 'asin="', ''), '"', ''))
+                        ELSE LOWER(target_text)
+                    END as normalized_target_lower,
+                    LOWER(campaign_name) as campaign_lower,
+                    LOWER(ad_group_name) as ad_group_lower,
+                    target_text, campaign_name, ad_group_name, match_type, action_type,
+                    DATE(action_date - (MOD((EXTRACT(DOW FROM action_date)::int - 2 + 7), 7)) * INTERVAL '1 day') as week_start,
+                    MAX(action_date) as action_date,
+                    (ARRAY_AGG(old_value ORDER BY action_date ASC))[1] as old_value,
+                    (ARRAY_AGG(new_value ORDER BY action_date DESC))[1] as new_value,
+                    STRING_AGG(DISTINCT reason, '; ') as reason,
+                    MAX(action_date) - INTERVAL '%(before_days)s days' as before_start,
+                    MAX(action_date) - INTERVAL '1 day' as before_end,
+                    MAX(action_date) as after_start,
+                    MAX(action_date) + INTERVAL '%(after_minus_1)s days' as after_end
+                FROM actions_log
+                WHERE client_id = %(client_id)s
+                  AND LOWER(action_type) NOT IN ('hold', 'monitor', 'flagged')
+                GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+            ),
+            latest_data AS (
+                SELECT MAX(start_date) as latest_date FROM target_stats WHERE client_id = %(client_id)s
+            )
+            SELECT 
+                a.action_date, 
+                a.action_type, 
+                a.target_text, 
+                a.campaign_name,
+                a.ad_group_name,
+                a.match_type,
+                a.old_value, 
+                a.new_value, 
+                a.reason,
+                a.before_start as before_date,
+                a.before_end as before_end_date,
+                a.after_start as after_date,
+                LEAST(a.after_end, ld.latest_date) as after_end_date,
+                -- Count actual CALENDAR DAYS in windows (not report count)
+                -- before_days = days spanned by data in before window + 7 (one week's data coverage)
+                COALESCE((SELECT (MAX(start_date)::date - MIN(start_date)::date) + 7
+                          FROM target_stats 
+                          WHERE client_id = %(client_id)s 
+                            AND start_date >= a.before_start AND start_date <= a.before_end), 0) as actual_before_days,
+                -- after_days = calendar days from action_date to latest available data
+                (ld.latest_date::date - a.after_start::date + 1) as actual_after_days,
+                -- BEFORE stats via LATERAL (per-action window)
+                COALESCE(bs.spend, bcs.spend, bc.spend, 0) as before_spend,
+                COALESCE(bs.sales, bcs.sales, bc.sales, 0) as before_sales,
+                COALESCE(bs.clicks, bcs.clicks, bc.clicks, 0) as before_clicks,
+                COALESCE(bs.impressions, bcs.impressions, bc.impressions, 0) as before_impressions,
+                -- AFTER stats via LATERAL (per-action window)
+                COALESCE(afs.spend, afcs.spend, ac.spend, 0) as observed_after_spend,
+                COALESCE(afs.sales, afcs.sales, ac.sales, 0) as observed_after_sales,
+                COALESCE(afs.clicks, afcs.clicks, ac.clicks, 0) as after_clicks,
+                COALESCE(afs.impressions, afcs.impressions, ac.impressions, 0) as after_impressions,
+                CASE 
+                    WHEN bs.spend IS NOT NULL THEN 'target'
+                    WHEN bcs.spend IS NOT NULL THEN 'cst'
+                    ELSE 'ad_group' 
+                END as match_level,
+                r30.rolling_spc as rolling_30d_spc
+            FROM aggregated_actions a
+            CROSS JOIN latest_data ld
+            -- BEFORE: target_text match (for BID_CHANGE)
+            LEFT JOIN LATERAL (
+                SELECT SUM(spend) as spend, SUM(sales) as sales, SUM(clicks) as clicks, SUM(impressions) as impressions
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.target_text) = a.target_lower
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= a.before_start AND t.start_date <= a.before_end
+            ) bs ON TRUE
+            -- BEFORE: CST match (for NEGATIVE/HARVEST)
+            LEFT JOIN LATERAL (
+                SELECT SUM(spend) as spend, SUM(sales) as sales, SUM(clicks) as clicks, SUM(impressions) as impressions
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.customer_search_term) = a.normalized_target_lower
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= a.before_start AND t.start_date <= a.before_end
+            ) bcs ON a.action_type IN ('NEGATIVE', 'NEGATIVE_ADD', 'HARVEST')
+            -- BEFORE: Ad Group fallback (Was Campaign)
+            LEFT JOIN LATERAL (
+                SELECT SUM(spend) as spend, SUM(sales) as sales, SUM(clicks) as clicks, SUM(impressions) as impressions
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= a.before_start AND t.start_date <= a.before_end
+            ) bc ON bs.spend IS NULL AND bcs.spend IS NULL
+            -- AFTER: target_text match (for BID_CHANGE)
+            LEFT JOIN LATERAL (
+                SELECT SUM(spend) as spend, SUM(sales) as sales, SUM(clicks) as clicks, SUM(impressions) as impressions
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.target_text) = a.target_lower
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= a.after_start AND t.start_date <= LEAST(a.after_end, ld.latest_date)
+            ) afs ON TRUE
+            -- AFTER: CST match (for NEGATIVE/HARVEST)
+            LEFT JOIN LATERAL (
+                SELECT SUM(spend) as spend, SUM(sales) as sales, SUM(clicks) as clicks, SUM(impressions) as impressions
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.customer_search_term) = a.normalized_target_lower
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= a.after_start AND t.start_date <= LEAST(a.after_end, ld.latest_date)
+            ) afcs ON a.action_type IN ('NEGATIVE', 'NEGATIVE_ADD', 'HARVEST')
+            -- AFTER: Ad Group fallback (Was Campaign)
+            LEFT JOIN LATERAL (
+                SELECT SUM(spend) as spend, SUM(sales) as sales, SUM(clicks) as clicks, SUM(impressions) as impressions
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= a.after_start AND t.start_date <= LEAST(a.after_end, ld.latest_date)
+            ) ac ON afs.spend IS NULL AND afcs.spend IS NULL
+            -- Rolling 30d stats for baseline
+            LEFT JOIN LATERAL (
+                SELECT CASE WHEN SUM(clicks) > 0 THEN SUM(sales) / SUM(clicks) ELSE NULL END as rolling_spc
+                FROM target_stats t
+                WHERE t.client_id = %(client_id)s
+                  AND LOWER(t.target_text) = a.target_lower
+                  AND LOWER(t.campaign_name) = a.campaign_lower
+                  AND LOWER(t.ad_group_name) = a.ad_group_lower
+                  AND t.start_date >= ld.latest_date - INTERVAL '30 days'
+            ) r30 ON TRUE
+            ORDER BY a.action_date DESC
+        """
+        
+        with self._get_connection() as conn:
+            df = pd.read_sql(query, conn, params={
+                'client_id': client_id,
+                'after_minus_1': after_minus_1,
+                'before_days': before_days
+            })
+        
+        if df.empty:
+            # _query_cache.set(cache_key, df)
+            return df
+            
+        # ==========================================
+        # NORMALIZATION: Symmetrical Comparison
+        # ==========================================
+        # If before window has 4 weeks of data and after only has 2 weeks,
+        # we scale the 'after' up to be comparable (apples-to-apples).
+        
+        # Cast to float to avoid FutureWarning when multiplying by float ratio
+        df['before_spend'] = df['before_spend'].astype(float)
+        df['before_sales'] = df['before_sales'].astype(float)
+        df['before_clicks'] = df['before_clicks'].astype(float)
+
+        for idx in df.index:
+            b_days = float(df.at[idx, 'actual_before_days'] or 0)
+            a_days = float(df.at[idx, 'actual_after_days'] or 0)
+            
+            # Normalization factor (to make 'before' comparable to 'after')
+            # If after_days is 3 and before_days is 7, multiply before by 3/7
+            if b_days > 0 and a_days > 0 and b_days != a_days:
+                ratio = a_days / b_days
+                df.at[idx, 'before_spend'] *= ratio
+                df.at[idx, 'before_sales'] *= ratio
+                df.at[idx, 'before_clicks'] *= ratio
+        
+        # Calculate maturity status (used for aggregation filtering)
+        # Action is 'mature' if we have full data for the requested horizon
+        # Use calculate actual days vs requested days
+        df['is_mature'] = df['actual_after_days'] >= after_days
+
+        # Normalize action types
+        df['action_type'] = df['action_type'].str.upper()
+        
+        # ==========================================
+        # LAYER 1: ACCOUNT BASELINE CALCULATION
+        # ==========================================
+        # Calculate account-wide spend and ROAS changes to normalize validation
+        total_before_spend = df['before_spend'].sum()
+        total_after_spend = df['observed_after_spend'].sum()
+        total_before_sales = df['before_sales'].sum()
+        total_after_sales = df['observed_after_sales'].sum()
+        
+        # Baseline metrics (stored for later use)
+        baseline_spend_change = (total_after_spend / total_before_spend - 1) if total_before_spend > 0 else 0
+        baseline_roas_before = total_before_sales / total_before_spend if total_before_spend > 0 else 0
+        baseline_roas_after = total_after_sales / total_after_spend if total_after_spend > 0 else 0
+        baseline_roas_change = (baseline_roas_after / baseline_roas_before - 1) if baseline_roas_before > 0 else 0
+        
+        # Store in dataframe for downstream use
+        df['_baseline_spend_change'] = baseline_spend_change
+        df['_baseline_roas_change'] = baseline_roas_change
+        
+        # Initialize columns
+        df['after_spend'] = 0.0
+        df['after_sales'] = 0.0
+        df['delta_spend'] = 0.0
+        df['delta_sales'] = 0.0
+        df['impact_score'] = 0.0
+        df['attribution'] = 'direct_causation'
+        df['validation_status'] = ''
+        df['spend_avoided'] = 0.0
+        
+        # RULE 1: NEGATIVE → After = $0, impact = cost saved
+        neg_mask = df['action_type'].isin(['NEGATIVE', 'NEGATIVE_ADD'])
+        df.loc[neg_mask, 'after_spend'] = 0.0
+        
+        # REST OF THE VALIDATION LOGIC REMAINS SAME...
+        # (Skipping to deduplication removal)
+        # ...
+        df.loc[neg_mask, 'after_sales'] = 0.0
+        df.loc[neg_mask, 'delta_spend'] = -df.loc[neg_mask, 'before_spend']
+        df.loc[neg_mask, 'delta_sales'] = -df.loc[neg_mask, 'before_sales']
+        df.loc[neg_mask, 'impact_score'] = df.loc[neg_mask, 'before_spend']  # Positive = cost saved
+        df.loc[neg_mask, 'attribution'] = 'cost_avoidance'
+        
+        # Check if negative was actually implemented
+        # Include all levels where we have actual search term data (target, cst, cst_account)
+        # Only 'campaign' level means no search term match
+        has_target_match = df['match_level'].isin(['target', 'cst', 'cst_account'])
+        
+        # Clear case: Target found in after window with spend = keyword still active
+        neg_not_impl = neg_mask & has_target_match & (df['observed_after_spend'] > 0)
+        df.loc[neg_not_impl, 'validation_status'] = '⚠️ NOT IMPLEMENTED'
+        
+        # NORMALIZED VALIDATION for NEG
+        # Target is "confirmed blocked" only if spend dropped significantly MORE than baseline
+        # threshold: at least 50% below baseline change, or 100% drop (to $0)
+        target_spend_change = (df['observed_after_spend'] / df['before_spend'] - 1).fillna(-1)
+        threshold = min(baseline_spend_change - 0.5, -0.95)  # At least 50% worse than baseline
+        
+        # Clear case: Target found with $0 spend = definitely blocked
+        neg_impl_zero = neg_mask & has_target_match & (df['observed_after_spend'] == 0)
+        df.loc[neg_impl_zero, 'validation_status'] = '✓ Confirmed blocked'
+        
+        # Normalized case: Significant drop beyond baseline
+        neg_impl_normalized = neg_mask & has_target_match & (df['observed_after_spend'] > 0) & (target_spend_change < threshold)
+        df.loc[neg_impl_normalized, 'validation_status'] = '✓ Normalized match'
+        
+        # Unclear: Target not found in after window (could be blocked or just no data)
+        neg_unknown = neg_mask & ~has_target_match
+        df.loc[neg_unknown, 'validation_status'] = '◐ Unverified (no target data)'
+        
+        # Special: Preventative negatives
+        prev_mask = neg_mask & (df['before_spend'] == 0)
+        df.loc[prev_mask, 'attribution'] = 'preventative'
+        df.loc[prev_mask, 'impact_score'] = 0
+        df.loc[prev_mask, 'validation_status'] = 'Preventative - no spend to save'
+        
+        # Special: Isolation negatives
+        reason_lower = df['reason'].fillna('').str.lower()
+        iso_mask = neg_mask & (reason_lower.str.contains('isolation|harvest'))
+        df.loc[iso_mask, 'attribution'] = 'isolation_negative'
+        df.loc[iso_mask, 'impact_score'] = 0
+        df.loc[iso_mask, 'validation_status'] = 'Part of harvest consolidation'
+        
+        # RULE 2: HARVEST → Tiered migration validation
+        harv_mask = df['action_type'] == 'HARVEST'
+        df.loc[harv_mask, 'after_spend'] = 0.0
+        df.loc[harv_mask, 'after_sales'] = 0.0
+        df.loc[harv_mask, 'delta_spend'] = 0.0
+        df.loc[harv_mask, 'delta_sales'] = df.loc[harv_mask, 'before_sales'] * 0.10
+        df.loc[harv_mask, 'impact_score'] = df.loc[harv_mask, 'delta_sales']
+        df.loc[harv_mask, 'attribution'] = 'harvest'
+        
+        # Tiered harvest validation based on source drop % and exact match growth
+        min_spend = HARVEST_VALIDATION_CONFIG['min_source_before_spend']
+        near_complete = HARVEST_VALIDATION_CONFIG['near_complete_threshold']
+        strong_thresh = HARVEST_VALIDATION_CONFIG['strong_migration_threshold']
+        partial_thresh = HARVEST_VALIDATION_CONFIG['partial_migration_threshold']
+        exact_growth_req = HARVEST_VALIDATION_CONFIG['exact_growth_required_for_partial']
+        
+        for idx in df[harv_mask].index:
+            source_before = df.at[idx, 'before_spend']
+            source_after = df.at[idx, 'observed_after_spend']
+            target_text = str(df.at[idx, 'target_text']).lower().strip()
+            
+            # Check minimum source spend threshold
+            if source_before < min_spend:
+                df.at[idx, 'validation_status'] = '◐ Unverified (low baseline)'
+                continue
+            
+            # Calculate source drop percentage
+            source_drop_pct = (source_before - source_after) / source_before
+            
+            # Look up exact match spend for this term (from same data)
+            exact_matches = df[
+                (df['target_text'].str.lower().str.strip() == target_text) &
+                (df['match_type'].str.lower() == 'exact')
+            ]
+            exact_after_spend = exact_matches['observed_after_spend'].sum() if len(exact_matches) > 0 else 0
+            exact_before_spend = exact_matches['before_spend'].sum() if len(exact_matches) > 0 else 0
+            exact_growth = exact_after_spend - exact_before_spend
+            exact_growth_pct = exact_growth / max(exact_before_spend, 1) if exact_before_spend > 0 else (1.0 if exact_after_spend > 0 else 0)
+            
+            # Store metrics for transparency
+            df.at[idx, 'source_drop_pct'] = round(source_drop_pct * 100, 1)
+            df.at[idx, 'exact_growth'] = round(exact_growth, 2)
+            
+            # TIER 1: Complete block ($0)
+            if source_after == 0:
+                df.at[idx, 'validation_status'] = '✓ Harvested (complete)'
+                continue
+            
+            # TIER 2: Near-complete (≥90% drop)
+            if source_drop_pct >= near_complete:
+                df.at[idx, 'validation_status'] = '✓ Harvested (90%+ blocked)'
+                continue
+            
+            # TIER 3: Strong migration (≥75% drop)
+            if source_drop_pct >= strong_thresh:
+                df.at[idx, 'validation_status'] = '✓ Harvested (migrated)'
+                continue
+            
+            # TIER 4: Partial migration (≥50% drop)
+            if source_drop_pct >= partial_thresh:
+                df.at[idx, 'validation_status'] = '✓ Harvested (partial)'
+                continue
+            
+            # TIER 5: Incomplete
+            if source_drop_pct > 0:
+                df.at[idx, 'validation_status'] = f'⚠️ Migration {source_drop_pct*100:.0f}%'
+            else:
+                df.at[idx, 'validation_status'] = '⚠️ Source still active'
+        
+        # RULE 3: BID_CHANGE + VISIBILITY_BOOST → Incremental Revenue = before_spend * (roas_after - roas_before)
+        # VISIBILITY_BOOST is treated same as BID_UP for impact calculation
+        bid_mask = df['action_type'].str.contains('BID|VISIBILITY_BOOST', na=False, regex=True)
+        df.loc[bid_mask, 'after_spend'] = df.loc[bid_mask, 'observed_after_spend']
+        df.loc[bid_mask, 'after_sales'] = df.loc[bid_mask, 'observed_after_sales']
+        df.loc[bid_mask, 'delta_spend'] = df.loc[bid_mask, 'observed_after_spend'] - df.loc[bid_mask, 'before_spend']
+        df.loc[bid_mask, 'delta_sales'] = df.loc[bid_mask, 'observed_after_sales'] - df.loc[bid_mask, 'before_sales']
+        
+        # ==========================================
+        # LAYER 2: DIRECTIONAL CPC VALIDATION
+        # ==========================================
+        # Parse old_value/new_value to determine if BID_UP or BID_DOWN
+        def parse_bid_direction(row):
+            old_str = str(row.get('old_value', '')).strip()
+            new_str = str(row.get('new_value', '')).strip()
+            
+            # If old_value is missing, can't determine direction
+            if not old_str or old_str == 'None' or old_str == 'nan':
+                return 'UNKNOWN'
+            
+            try:
+                old_val = float(old_str.replace('$', '').replace(',', ''))
+                new_val = float(new_str.replace('$', '').replace(',', ''))
+                return 'DOWN' if new_val < old_val else 'UP'
+            except:
+                return 'UNKNOWN'
+        
+        # Calculate individual ROAS changes for each action
+        for idx in df[bid_mask].index:
+            b_spend = df.at[idx, 'before_spend']
+            b_sales = df.at[idx, 'before_sales']
+            a_spend = df.at[idx, 'observed_after_spend']
+            a_sales = df.at[idx, 'observed_after_sales']
+            
+            # Local deltas for calculation
+            delta_spend = a_spend - b_spend
+            delta_sales = a_sales - b_sales
+            
+            b_clicks = df.at[idx, 'before_clicks'] if 'before_clicks' in df.columns else 0
+            a_clicks = df.at[idx, 'after_clicks'] if 'after_clicks' in df.columns else 0
+            
+            # Extract impressions for new validation layers
+            b_impressions = df.at[idx, 'before_impressions'] if 'before_impressions' in df.columns else 0
+            a_impressions = df.at[idx, 'after_impressions'] if 'after_impressions' in df.columns else 0
+            
+            # Calculate actual CPCs
+            before_cpc = b_spend / b_clicks if b_clicks > 0 else 0
+            after_cpc = a_spend / a_clicks if a_clicks > 0 else 0
+            
+            # Calculate impressions change
+            imp_change_pct = (a_impressions - b_impressions) / b_impressions if b_impressions > 0 else 0
+            
+            # Get suggested bid from new_value
+            new_value_str = str(df.at[idx, 'new_value']).strip()
+            try:
+                suggested_bid = float(new_value_str.replace('$', '').replace(',', ''))
+            except:
+                suggested_bid = 0
+            
+            r_before = b_sales / b_spend if b_spend > 0 else 0
+            r_after = a_sales / a_spend if a_spend > 0 else 0
+            
+            # Get bid direction - use before_cpc as fallback when old_value is missing
+            bid_direction = parse_bid_direction(df.loc[idx])
+            if bid_direction == 'UNKNOWN' and before_cpc > 0 and suggested_bid > 0:
+                # Fallback: compare suggested bid to before_cpc
+                if suggested_bid > before_cpc * 1.05:  # >5% higher than before_cpc = UP
+                    bid_direction = 'UP'
+                elif suggested_bid < before_cpc * 0.95:  # <5% lower than before_cpc = DOWN
+                    bid_direction = 'DOWN'
+            
+            # Calculate CPC change percentage
+            cpc_change_pct = (after_cpc - before_cpc) / before_cpc if before_cpc > 0 else 0
+            
+            # LAYER 1: CPC Match (tightened to 15%)
+            cpc_validated = False
+            cpc_tolerance = BID_VALIDATION_CONFIG['cpc_match_threshold']  # 0.15
+            
+            if suggested_bid > 0 and after_cpc > 0:
+                cpc_match_ratio = after_cpc / suggested_bid
+                if 1 - cpc_tolerance <= cpc_match_ratio <= 1 + cpc_tolerance:
+                    cpc_validated = True
+            
+            # LAYER 2: CPC Directional (>5% CPC change in expected direction)
+            cpc_dir_threshold = BID_VALIDATION_CONFIG['cpc_directional_threshold']  # 0.05
+            directional_match = None
+            
+            if before_cpc > 0 and after_cpc > 0:
+                if bid_direction == 'DOWN' and cpc_change_pct < -cpc_dir_threshold:
+                    directional_match = True
+                elif bid_direction == 'UP' and cpc_change_pct > cpc_dir_threshold:
+                    directional_match = True
+                elif bid_direction == 'UNKNOWN':
+                    directional_match = None
+                else:
+                    directional_match = False
+            
+            # LAYER 3: Volume Validated (NEW) - Impressions changed significantly
+            volume_validated = False
+            min_imp = BID_VALIDATION_CONFIG['min_impressions_before']  # 50
+            imp_up_threshold = BID_VALIDATION_CONFIG['impressions_increase_threshold']  # 0.20
+            imp_down_threshold = BID_VALIDATION_CONFIG['impressions_decrease_threshold']  # 0.15
+            
+            if b_impressions >= min_imp:
+                if bid_direction == 'UP' and imp_change_pct >= imp_up_threshold:
+                    volume_validated = True
+                elif bid_direction == 'DOWN' and imp_change_pct <= -imp_down_threshold:
+                    volume_validated = True
+            
+            # LAYER 4: Directional + Volume (NEW) - Weak signals combined
+            combined_validated = False
+            combined_imp_threshold = BID_VALIDATION_CONFIG['combined_impressions_threshold']  # 0.10
+            
+            if b_impressions >= min_imp and not cpc_validated and directional_match is not True and not volume_validated:
+                if bid_direction == 'UP':
+                    # Any CPC increase + moderate impressions increase
+                    if cpc_change_pct > 0 and imp_change_pct > combined_imp_threshold:
+                        combined_validated = True
+                elif bid_direction == 'DOWN':
+                    # Any CPC decrease + moderate impressions decrease
+                    if cpc_change_pct < 0 and imp_change_pct < -combined_imp_threshold:
+                        combined_validated = True
+            
+            # LAYER 5: Normalized winner (beat account baseline)
+            target_roas_change = (r_after / r_before - 1) if r_before > 0 else 0
+            beat_baseline = target_roas_change > baseline_roas_change
+            
+            # Calculate impact based on validation status
+            delta_sales = a_sales - b_sales
+            
+            # Require minimum clicks for reliable ROAS-based impact calculation
+            min_clicks_for_roas = 5
+            has_enough_data = (b_clicks >= min_clicks_for_roas and a_clicks >= min_clicks_for_roas)
+            
+            # Include volume_validated and combined_validated in impact calculation
+            is_validated = (cpc_validated or directional_match is True or volume_validated or combined_validated)
+            
+            if is_validated and has_enough_data:
+                # Validated with sufficient data: Use ROAS-based impact, capped
+                roas_impact = b_spend * (r_after - r_before)
+                # Cap at 2x the actual delta_sales to prevent inflation
+                max_impact = abs(delta_sales) * 2 if delta_sales != 0 else abs(roas_impact)
+                impact_score = max(min(roas_impact, max_impact), -max_impact) if roas_impact != 0 else delta_sales
+                df.at[idx, 'impact_score'] = impact_score
+            else:
+                # Not validated OR insufficient data: Use actual delta_sales (conservative)
+                df.at[idx, 'impact_score'] = delta_sales
+            
+            # Set validation status based on layers (order matters - first match wins)
+            # FIRST: Handle zero after-spend based on action intent
+            if a_spend == 0:
+                if b_spend > 0:
+                    # Had spend before, now $0 - check if this was intended
+                    if bid_direction == 'DOWN':
+                        # BID_DOWN with $0 after = SUCCESS (spend eliminated)
+                        df.at[idx, 'validation_status'] = '✓ Spend Eliminated'
+                        df.at[idx, 'spend_avoided'] = b_spend
+                        
+                        # Fix: Impact is Net Profit Change (Sales Lost + Spend Saved)
+                        # delta_sales is negative (lost sales), delta_spend is negative (saved spend)
+                        # Impact = delta_sales - delta_spend
+                        df.at[idx, 'impact_score'] = delta_sales - delta_spend
+                        
+                        continue  # Skip rest of validation
+                    else:
+                        # BID_UP with $0 after = likely not implemented or target died
+                        df.at[idx, 'validation_status'] = '◐ No after data'
+                        continue
+                else:
+                    # No spend before AND after = dormant target
+                    df.at[idx, 'validation_status'] = '◐ Dormant target'
+                    continue
+            elif a_clicks == 0:
+                # Has spend but no clicks = data anomaly, mark but continue validation
+                df.at[idx, 'validation_status'] = '◐ Low click volume'
+                # Don't continue - let other validation layers try
+            
+            if cpc_validated and beat_baseline:
+                df.at[idx, 'validation_status'] = '✓ CPC Match + Baseline'
+            elif cpc_validated:
+                df.at[idx, 'validation_status'] = '✓ CPC Validated'
+            elif directional_match is True and beat_baseline:
+                df.at[idx, 'validation_status'] = '✓ Directional + Baseline'
+            elif directional_match is True:
+                df.at[idx, 'validation_status'] = '✓ Directional match'
+            elif volume_validated:
+                df.at[idx, 'validation_status'] = '✓ Volume Validated'
+            elif combined_validated:
+                df.at[idx, 'validation_status'] = '✓ Directional + Volume'
+            elif beat_baseline:
+                df.at[idx, 'validation_status'] = '◐ Beat baseline only'
+            else:
+                df.at[idx, 'validation_status'] = '⚠️ Not validated'
+        
+        # RULE 4: PAUSE → Incremental loss = -before_sales (minus what you saved in spend)
+        pause_mask = df['action_type'].str.contains('PAUSE', na=False)
+        df.loc[pause_mask, 'after_spend'] = 0.0
+        df.loc[pause_mask, 'after_sales'] = 0.0
+        df.loc[pause_mask, 'delta_spend'] = -df.loc[pause_mask, 'before_spend']
+        df.loc[pause_mask, 'delta_sales'] = -df.loc[pause_mask, 'before_sales']
+        # For pause, impact is net incremental revenue (sales lost - spend saved)
+        df.loc[pause_mask, 'impact_score'] = df.loc[pause_mask, 'delta_sales'] - df.loc[pause_mask, 'delta_spend']
+        df.loc[pause_mask, 'attribution'] = 'structural_change'
+
+        
+        pause_not_impl = pause_mask & (df['observed_after_spend'] > 0)
+        df.loc[pause_not_impl, 'validation_status'] = '⚠️ Still has spend'
+        pause_impl = pause_mask & (df['observed_after_spend'] == 0)
+        df.loc[pause_impl, 'validation_status'] = '✓ Confirmed paused'
+        
+        # ==========================================
+        # CREDIT SYSTEM: Only count confirmed implementations
+        # Zero out impact_score for actions that weren't implemented
+        # Actions are still shown in table, but don't count toward totals
+        # ==========================================
+        not_implemented_statuses = [
+            '⚠️ NOT IMPLEMENTED',
+            '⚠️ Source still active',
+            '⚠️ Still has spend',
+            '◐ Unverified (no target data)'  # Can't confirm, don't credit
+        ]
+        not_impl_mask = df['validation_status'].isin(not_implemented_statuses)
+        
+        # Determine winners based on ABSOLUTE net impact (Sales Δ - Spend Δ > 0)
+        df['is_winner'] = (df['delta_sales'] - df['delta_spend']) > 0
+        
+        # Store original impact for display, then zero out for totals
+        df['potential_impact'] = df['impact_score'].copy()  # What it WOULD have been
+        df.loc[not_impl_mask, 'impact_score'] = 0  # Zero for not implemented
+        
+        # ==========================================
+        # DEDUPLICATION: Prevent campaign-level overcounting
+        # This is CRITICAL: If 10 targets in one campaign all fall back to 
+        # the same campaign-level impact, we MUST only count that impact once.
+        # ==========================================
+        before_count = len(df)
+        
+        # Key for collapsing redundant campaign-level impact
+        # We group by (campaign, action_type, stats_signature)
+        df['_dedup_key'] = (
+            df['campaign_name'].fillna('').str.lower() + '|' +
+            df['action_type'].fillna('') + '|' +
+            df['before_spend'].round(2).astype(str) + '|' +
+            df['before_sales'].round(2).astype(str)
+        )
+        
+        # Keep first (favors specific target records if they exist)
+        # For weekly buckets, we also deduplicate within the bucket implicitly here.
+        df = df.drop_duplicates(subset='_dedup_key', keep='first')
+        df = df.drop(columns=['_dedup_key'])
+        
+        # ==========================================
+        # ADD PER-ROW DECISION METRICS TO DATAFRAME
+        # (Single source of truth - frontend displays, doesn't recalculate)
+        # ==========================================
+        import numpy as np
+        
+        # Calculate decision metrics for ALL action types (not just BID)
+        # This ensures HARVEST/NEGATIVE actions also have CPC, decision_impact for display
+        
+        # SPC Baseline: 30D rolling with window fallback (per PRD 4.7.3)
+        df['spc_window'] = (
+            df['before_sales'] / 
+            df['before_clicks'].replace(0, np.nan)
+        )
+        df['spc_before'] = df['rolling_30d_spc'].fillna(df['spc_window'])
+        
+        # ==========================================
+        # LOW-SAMPLE SPC GUARDRAIL (Critical Fix)
+        # ==========================================
+        # Problem: Single-click conversions create inflated SPC (e.g., 62 AED/click)
+        # which causes massive negative impacts when extrapolated.
+        # Solution: Cap SPC for low-sample targets to reasonable max using median + 2*std
+        MIN_CLICKS_FOR_RELIABLE_SPC = 5
+        low_sample_mask = df['before_clicks'] < MIN_CLICKS_FOR_RELIABLE_SPC
+        
+        # EXTENDED GUARDRAIL: For medium confidence (5-20 clicks), apply SPC capping
+        # to prevent "lucky streak" outliers (like loose-match with 9.8 clicks, 10 ROAS)
+        # from creating impossible baselines.
+        medium_sample_mask = (df['before_clicks'] >= 5) & (df['before_clicks'] < 20)
+        
+        # GUARDRAIL: Efficiency Capping (ROAS-based)
+        # ------------------------------------------
+        # Problem: Low CPC + High SPC = Massive ROAS (e.g. 0.65 CPC, 6.9 SPC -> 10.6 ROAS)
+        # When spend scales, this extrapolated efficiency creates impossible expectations.
+        # Solution: Cap implied ROAS for low-confidence (<20 clicks) targets.
+        
+        # Ensure cpc_before exists
+        if 'cpc_before' not in df.columns:
+             df['cpc_before'] = (df['before_spend'] / df['before_clicks'].replace(0, np.nan)).fillna(0)
+
+        # 1. Calculate Implied ROAS for all rows (handle div/0)
+        cpc_safe = df['cpc_before'].replace(0, np.nan)
+        df['implied_roas'] = df['spc_before'] / cpc_safe
+        
+        # 2. Calculate ROAS Cap from HIGH CONFIDENCE targets (>20 clicks)
+        # Exclude Negatives/Harvests from baseline as they skew distribution
+        high_confidence_mask = df['before_clicks'] >= 20
+        standard_mask = ~df['action_type'].isin(['NEGATIVE', 'NEGATIVE_ADD', 'HARVEST'])
+        baseline_mask = high_confidence_mask & standard_mask
+        
+        reliable_roas = df.loc[baseline_mask, 'implied_roas'].dropna()
+        reliable_roas = reliable_roas[reliable_roas < 100]  # Filter insane values
+        
+        if len(reliable_roas) > 3:
+            # Conservative cap: Median + 1*Std (Stricter to catch loose-match outliers)
+            # 2*Std yielded ~13.59 which still allowed 10.6 ROAS. 1*Std should bring it closer to ~10.
+            roas_cap = reliable_roas.median() + 1.0 * reliable_roas.std()
+        else:
+            # Fallback: Use reasonable ROAS cap (e.g. 5.0)
+            roas_cap = 5.0
+            
+        # 3. Apply cap to low-confidence targets (<20 clicks) where ROAS exceeds cap
+        cap_mask = (~high_confidence_mask) & (df['implied_roas'] > roas_cap)
+        
+        # Adjust SPC downwards to match the ROAS cap
+        # New SPC = ROAS_Cap * CPC
+        df.loc[cap_mask, 'spc_before'] = roas_cap * df.loc[cap_mask, 'cpc_before']
+        
+        # (Old SPC-only capping removed as ROAS capping is superior)
+        
+        # CPC calculations
+        df['cpc_before'] = (
+            df['before_spend'] / 
+            df['before_clicks'].replace(0, np.nan)
+        )
+        df['cpc_after'] = (
+            df['observed_after_spend'] / 
+            df['after_clicks'].replace(0, np.nan)
+        )
+        
+        # CPC Change %
+        df['cpc_change_pct'] = (
+            (df['cpc_after'] - df['cpc_before']) / 
+            df['cpc_before']
+        ).fillna(0) * 100
+        
+        # Decision Impact Formula (PRD 4.7.2)
+        df['expected_clicks'] = (
+            df['observed_after_spend'] / df['cpc_before']
+        )
+        df['expected_sales'] = (
+            df['expected_clicks'] * df['spc_before']
+        )
+        df['decision_impact'] = (
+            df['observed_after_sales'] - df['expected_sales']
+        )
+        
+        # CRITICAL FIX: For NEGATIVE and HARVEST, use the specialized impact_score 
+        # (For Negatives: Spend Saved. For Harvest: 10% attribution)
+        # Also include any 'Spend Eliminated' items (e.g. Pauses or Bid Downs that killed spend)
+        # The formula above (After - Expected) yields 0 or bad data for these types.
+        
+        # Check validation status for spend elimination (safe since status is string)
+        is_spend_eliminated = df['validation_status'].fillna('').str.contains('Spend Eliminated|Confirmed blocked', regex=True)
+        is_special_type = df['action_type'].isin(['NEGATIVE', 'NEGATIVE_ADD', 'HARVEST'])
+        
+        special_types_mask = is_special_type | is_spend_eliminated
+        
+        df.loc[special_types_mask, 'decision_impact'] = df.loc[special_types_mask, 'impact_score']
+        
+        # Ensure we don't have NaNs for these
+        df['decision_impact'] = df['decision_impact'].fillna(0)
+        
+        # ==========================================
+        # CRITICAL: Zero out impact for low-sample baselines
+        # ==========================================
+        # Targets with <5 clicks cannot provide reliable impact estimates
+        # The SPC from 1-2 clicks is statistically meaningless
+        # These should NOT contribute positive or negative to total impact
+        import numpy as np
+        # Only apply low-sample filter to standard BID/PAUSE actions where SPC is used for calculation
+        # NEGATIVE/HARVEST/Spend-Eliminated use actual spend_saved/fixed logic
+        
+        # Re-using logic: match what we did for special_types_mask above
+        is_spend_eliminated_check = df['validation_status'].fillna('').str.contains('Spend Eliminated|Confirmed blocked', regex=True)
+        is_special_type_check = df['action_type'].isin(['NEGATIVE', 'NEGATIVE_ADD', 'HARVEST'])
+        exempt_mask = is_special_type_check | is_spend_eliminated_check
+        
+        standard_actions_mask = ~exempt_mask
+        
+        insufficient_baseline_mask = (df['before_clicks'] < MIN_CLICKS_FOR_RELIABLE_SPC) & standard_actions_mask
+        df.loc[insufficient_baseline_mask, 'decision_impact'] = 0
+        df['insufficient_baseline'] = insufficient_baseline_mask
+        
+        # ==========================================
+        # MARKET QUADRANT CLASSIFICATION (Single Source of Truth)
+        # ==========================================
+        # These percentages and tags are used for Hero banner, charts, and all displays
+        # Calculating ONCE here prevents recalculation in 5+ places in impact_dashboard.py
+        
+        # Expected Trend %: What market would have done without your decision
+        df['expected_trend_pct'] = (
+            (df['expected_sales'] - df['before_sales']) / 
+            df['before_sales'].replace(0, np.nan) * 100
+        ).fillna(0)
+        
+        # Actual Change %: What actually happened
+        df['actual_change_pct'] = (
+            (df['observed_after_sales'] - df['before_sales']) / 
+            df['before_sales'].replace(0, np.nan) * 100
+        ).fillna(0)
+        
+        # Decision Value %: Impact attributable to your decision (Actual - Expected)
+        df['decision_value_pct'] = df['actual_change_pct'] - df['expected_trend_pct']
+        
+        # Zero out decision_value_pct for low-sample baselines
+        df.loc[insufficient_baseline_mask, 'decision_value_pct'] = 0
+        
+        # Market Tag: Quadrant classification for aggregation
+        # - Offensive Win: Market up, decision helped
+        # - Defensive Win: Market down, decision saved you
+        # - Gap: Market up, decision hurt (missed opportunity)
+        # - Market Drag: Market down, decision also down (ambiguous attribution)
+        conditions = [
+            (df['expected_trend_pct'] >= 0) & (df['decision_value_pct'] >= 0),  # Offensive Win
+            (df['expected_trend_pct'] < 0) & (df['decision_value_pct'] >= 0),   # Defensive Win
+            (df['expected_trend_pct'] >= 0) & (df['decision_value_pct'] < 0),   # Gap
+            (df['expected_trend_pct'] < 0) & (df['decision_value_pct'] < 0),    # Market Drag
+        ]
+        choices = ['Offensive Win', 'Defensive Win', 'Gap', 'Market Drag']
+        df['market_tag'] = np.select(conditions, choices, default='Unknown')
+        
+        # Spend Avoided (for defensive actions) - preserve any existing value
+        df['spend_avoided'] = df['spend_avoided'].fillna(
+            (df['before_spend'] - df['observed_after_spend']).clip(lower=0)
+        )
+        
+        # Market Downshift flag
+        df['market_downshift'] = (
+            df['cpc_after'] <= 0.75 * df['cpc_before']
+        )
+        
+        
+        # ==========================================
+        # REFACTOR ENHANCEMENT 1: Soft Confidence Weight (Additive)
+        # ==========================================
+        # Reduce over-representation of marginally valid rows (5-14 clicks)
+        # Scale weight linearly from 5/15 (0.33) to 15/15 (1.0)
+        # Rows with <5 clicks are already 0 impact, so weight doesn't matter there
+        df['confidence_weight'] = (df['before_clicks'] / 15.0).clip(upper=1.0)
+        
+        # CRITICAL FIX: Negative/Harvest validation doesn't depend on click volume for confidence
+        # If we validated it (Spend Eliminated), the impact is 100% real.
+        df.loc[special_types_mask, 'confidence_weight'] = 1.0
+
+        # PENALTY: Ad Group Fallback (Less specific data)
+        # Apply 50% penalty to confidence if using fallback data
+        if 'match_level' in df.columns:
+            fallback_mask = (df['match_level'] == 'ad_group')
+            df.loc[fallback_mask, 'confidence_weight'] *= 0.5
+        
+        # Final Impact = Raw Impact * Confidence Weight
+        # Does not override existing exclusions (0 * weight = 0)
+        # [v3.2 BACKUP] This is the original v3.2 linear impact calculation
+        df['final_decision_impact'] = df['decision_impact'] * df['confidence_weight']
+
+        # ==========================================
+        # IMPACT MODEL v3.3: LAYERED COUNTERFACTUAL
+        # ==========================================
+        # Apply layered model if v3.3 is enabled (feature flag control)
+        if IMPACT_MODEL_VERSION == "v3.3":
+            # Calculate v3.3 impact with market + scale adjustments
+            df = self._calculate_v33_impact_columns(df)
+
+            # Override the final_decision_impact with v3.3 values
+            # This preserves v3.2 columns (decision_impact, final_decision_impact) for comparison
+            df['decision_impact_v32'] = df['decision_impact'].copy()  # Backup v3.2 for comparison
+            df['final_decision_impact_v32'] = df['final_decision_impact'].copy()  # Backup v3.2 for comparison
+
+            # Replace with v3.3 values (these become the "official" values)
+            df['decision_impact'] = df['impact_v33']
+            df['final_decision_impact'] = df['final_impact_v33']
+            df['expected_sales'] = df['expected_sales_v33']
+
+            # Recalculate market tag using v3.3 impact for decision_value_pct
+            # This ensures quadrants are based on v3.3 impact, not v3.2
+            df['expected_trend_pct'] = (
+                (df['expected_sales_v33'] - df['before_sales']) /
+                df['before_sales'].replace(0, np.nan) * 100
+            ).fillna(0)
+
+            df['decision_value_pct'] = df['actual_change_pct'] - df['expected_trend_pct']
+
+            # Zero out decision_value_pct for low-sample baselines
+            df.loc[insufficient_baseline_mask, 'decision_value_pct'] = 0
+
+            # Recalculate market_tag with v3.3 decision_value_pct
+            conditions = [
+                (df['expected_trend_pct'] >= 0) & (df['decision_value_pct'] >= 0),  # Offensive Win
+                (df['expected_trend_pct'] < 0) & (df['decision_value_pct'] >= 0),   # Defensive Win
+                (df['expected_trend_pct'] >= 0) & (df['decision_value_pct'] < 0),   # Gap
+                (df['expected_trend_pct'] < 0) & (df['decision_value_pct'] < 0),    # Market Drag
+            ]
+            choices = ['Offensive Win', 'Defensive Win', 'Gap', 'Market Drag']
+            df['market_tag'] = np.select(conditions, choices, default='Unknown')
+
+        # If v3.2 mode, the original calculations above are used as-is
+        # This allows instant rollback by changing IMPACT_MODEL_VERSION constant
+
+        # ==========================================
+        # REFACTOR ENHANCEMENT 2: Impact Tier Classification (Non-Destructive)
+        # ==========================================
+        # 1) "Excluded": decision_impact == 0 (due to any previous guardrail)
+        # 2) "Directional": impact != 0 AND before_clicks < 15
+        # 3) "Validated": impact != 0 AND before_clicks >= 15
+        
+        tier_conditions = [
+            (df['decision_impact'] == 0),
+            (df['decision_impact'] != 0) & (df['before_clicks'] < 15),
+            (df['decision_impact'] != 0) & (df['before_clicks'] >= 15)
+        ]
+        tier_choices = ['Excluded', 'Directional', 'Validated']
+        df['impact_tier'] = np.select(tier_conditions, tier_choices, default='Excluded')
+
+        # ==========================================
+        # PHASE 5: Add model version indicator for historical data tracking
+        # ==========================================
+        df['model_version'] = IMPACT_MODEL_VERSION
+
+        # _query_cache.set(cache_key, df)
+        return df
+
+    def _empty_summary(self) -> Dict[str, Any]:
+        return {
+            'total_actions': 0, 'roas_before': 0, 'roas_after': 0, 'roas_lift_pct': 0,
+            'incremental_revenue': 0, 'p_value': 1.0, 'is_significant': False,
+            'confidence_pct': 0, 'implementation_rate': 0, 'confirmed_impact': 0,
+            'pending': 0, 'not_implemented': 0, 'win_rate': 0, 'winners': 0, 'losers': 0,
+            'by_action_type': {},
+            # Decision Impact fields
+            'decision_impact': 0, 'spend_avoided': 0,
+            'pct_good': 0, 'pct_neutral': 0, 'pct_bad': 0, 'market_downshift_count': 0
+        }
+
+    def _calculate_metrics_from_df(self, df: pd.DataFrame, window_days: int, label: str = "ALL") -> Dict[str, Any]:
+        """Internal helper to calculate statistics from a filtered impact dataframe."""
+        import scipy.stats as scipy_stats
+        import numpy as np
+        
+        if df.empty:
+            return self._empty_summary()
+            
+        total_actions = len(df)
+        
+        # ==========================================
+        # 1. ROAS ANALYTICS + DECISION IMPACT (BID_CHANGE + VISIBILITY_BOOST)
+        # ==========================================
+        bid_mask = df['action_type'].str.contains('BID|VISIBILITY_BOOST', na=False, regex=True)
+        bid_df = df[bid_mask].copy()
+        
+        # We also want to include targets that had 0 spend in one period to avoid 'missing' impact
+        bid_df = bid_df[(bid_df['before_spend'] > 0) | (bid_df['observed_after_spend'] > 0)]
+        
+        if len(bid_df) > 5:
+            total_before_spend = bid_df['before_spend'].sum()
+            total_after_spend = bid_df['observed_after_spend'].sum()
+            total_before_sales = bid_df['before_sales'].sum()
+            total_after_sales = bid_df['observed_after_sales'].sum()
+            
+            roas_before = total_before_sales / total_before_spend if total_before_spend > 0 else 0
+            roas_after = total_after_sales / total_after_spend if total_after_spend > 0 else 0
+            roas_lift_pct = ((roas_after - roas_before) / roas_before * 100) if roas_before > 0 else 0
+            incremental_revenue = total_before_spend * (roas_after - roas_before)
+            
+            # ==========================================
+            # DECISION IMPACT CALCULATIONS
+            # ==========================================
+            # CPC: Use old_value (bid) if available, else derive from spend/clicks
+            bid_df['cpc_before'] = pd.to_numeric(bid_df['old_value'], errors='coerce').fillna(
+                bid_df['before_spend'] / bid_df['before_clicks'].replace(0, np.nan)
+            )
+            bid_df['cpc_after'] = bid_df['observed_after_spend'] / bid_df['after_clicks'].replace(0, np.nan)
+            
+            # Sales per Click - Use 30D ROLLING AVERAGE for stable baseline
+            # Fallback to window-based SPC if rolling not available
+            bid_df['spc_window'] = bid_df['before_sales'] / bid_df['before_clicks'].replace(0, np.nan)
+            bid_df['spc_before'] = bid_df['rolling_30d_spc'].fillna(bid_df['spc_window'])
+            
+            # ==========================================
+            # LOW-SAMPLE SPC GUARDRAIL (Critical Fix)
+            # ==========================================
+            # Problem: Single-click conversions create inflated SPC (e.g., 62 AED/click)
+            # which causes massive negative impacts when extrapolated.
+            # Solution: Cap SPC for low-sample targets to reasonable max using median + 2*std
+            # Solution: Cap SPC for low-sample targets to reasonable max using median + 2*std
+            MIN_CLICKS_FOR_RELIABLE_SPC = 5
+            low_sample_mask = bid_df['before_clicks'] < MIN_CLICKS_FOR_RELIABLE_SPC
+            
+            # EXTENDED GUARDRAIL: Cap medium sample (5-20 clicks) too
+            medium_sample_mask = (bid_df['before_clicks'] >= 5) & (bid_df['before_clicks'] < 20)
+            
+            # GUARDRAIL: Efficiency Capping (ROAS-based)
+            # ------------------------------------------
+            # 1. Calculate Implied ROAS
+            cpc_safe = bid_df['cpc_before'].replace(0, np.nan)
+            bid_df['implied_roas'] = bid_df['spc_before'] / cpc_safe
+            
+            # 2. Calculate ROAS Cap from HIGH CONFIDENCE (>20 clicks)
+            high_confidence_mask = bid_df['before_clicks'] >= 20
+            reliable_roas = bid_df.loc[high_confidence_mask, 'implied_roas'].dropna()
+            reliable_roas = reliable_roas[reliable_roas < 100]
+            
+            if len(reliable_roas) > 3:
+                roas_cap = reliable_roas.median() + 2 * reliable_roas.std()
+            else:
+                roas_cap = 5.0  # Fallback reasonable cap
+                
+            # 3. Apply cap to low-confidence targets
+            cap_mask = (~high_confidence_mask) & (bid_df['implied_roas'] > roas_cap)
+            bid_df.loc[cap_mask, 'spc_before'] = roas_cap * bid_df.loc[cap_mask, 'cpc_before']
+            
+            # Counterfactual: Expected sales if we kept old CPC
+            # Expected_Clicks = After_Spend / Before_CPC
+            # Expected_Sales = Expected_Clicks * SPC_Baseline (30D rolling or window fallback)
+            bid_df['expected_clicks'] = bid_df['observed_after_spend'] / bid_df['cpc_before']
+            bid_df['expected_sales'] = bid_df['expected_clicks'] * bid_df['spc_before']
+            
+            # Decision Impact = Actual - Counterfactual
+            bid_df['decision_impact'] = bid_df['observed_after_sales'] - bid_df['expected_sales']
+            
+            # Spend Changes
+            bid_df['spend_change'] = bid_df['observed_after_spend'] - bid_df['before_spend']
+            bid_df['spend_avoided'] = (bid_df['before_spend'] - bid_df['observed_after_spend']).clip(lower=0)
+            
+            # CPC Change %
+            bid_df['cpc_change_pct'] = (bid_df['cpc_after'] - bid_df['cpc_before']) / bid_df['cpc_before']
+            
+            # ==========================================
+            # GUARDRAILS
+            # ==========================================
+            # Guardrail 1: Market Downshift (CPC dropped 25%+)
+            bid_df['market_downshift'] = bid_df['cpc_after'] <= 0.75 * bid_df['cpc_before']
+            
+            # Guardrail 2: Insufficient Baseline (fewer than 3 clicks before)
+            # NOTE: Extended from 0 to 3 to catch more low-sample edge cases
+            bid_df['insufficient_baseline'] = bid_df['before_clicks'] < 3
+            
+            # ==========================================
+            # OUTCOME CLASSIFICATION
+            # ==========================================
+            def classify_outcome(row):
+                # Missing data -> Neutral
+                if pd.isna(row.get('decision_impact')) or row.get('insufficient_baseline', False):
+                    return 'Neutral'
+                
+                impact = row['decision_impact']
+                spend_avoided = row.get('spend_avoided', 0)
+                spend_before = row.get('before_spend', 0)
+                cpc_change = row.get('cpc_change_pct', 0)
+                action = str(row.get('action_type', '')).upper()
+                sales_before = row.get('before_sales', 0)
+                
+                # Thresholds
+                impact_small = abs(impact) < max(0.05 * sales_before, 25) if sales_before > 0 else abs(impact) < 25
+                spend_avoided_low = spend_avoided < 0.10 * spend_before if spend_before > 0 else True
+                
+                # HOLD classification
+                if 'HOLD' in action:
+                    low_vol = abs(cpc_change) < 0.10 if pd.notna(cpc_change) else True
+                    return 'Good' if low_vol else 'Neutral'
+                
+                # BID_DOWN / PAUSE classification
+                if 'DOWN' in action or 'PAUSE' in action:
+                    if spend_avoided_low and impact < 0:
+                        return 'Bad'
+                    return 'Good' if spend_avoided > 0 else 'Neutral'
+                
+                # BID_UP classification
+                if 'UP' in action:
+                    incr_sales = row['observed_after_sales'] - row['before_sales']
+                    incr_spend = row['observed_after_spend'] - row['before_spend']
+                    if incr_sales > incr_spend:
+                        return 'Good'
+                    elif impact < 0 and not row.get('market_downshift', False):
+                        return 'Bad'
+                    return 'Neutral'
+                
+                # Default logic
+                if impact > 0:
+                    return 'Good'
+                elif impact_small or row.get('market_downshift', False):
+                    return 'Neutral'
+                else:
+                    return 'Bad'
+            
+            bid_df['outcome'] = bid_df.apply(classify_outcome, axis=1)
+            
+            # ==========================================
+            # CRITICAL: Zero out impact for low-sample baselines
+            # ==========================================
+            # Targets with <5 clicks cannot provide reliable impact estimates
+            # Must zero BEFORE aggregation to prevent inflated totals
+            MIN_CLICKS_FOR_RELIABLE = 5
+            low_sample_mask = bid_df['before_clicks'] < MIN_CLICKS_FOR_RELIABLE
+            bid_df.loc[low_sample_mask, 'decision_impact'] = 0
+            
+            # ==========================================
+            # MARKET DRAG EXCLUSION (Consistency with Dashboard)
+            # ==========================================
+            # Use pre-calculated market_tag if available, otherwise calculate
+            if 'market_tag' in bid_df.columns:
+                # Exclude Market Drag for attributed impact (same as Dashboard Hero)
+                non_drag_df = bid_df[bid_df['market_tag'] != 'Market Drag']
+            else:
+                # Fallback: Calculate market_tag if not present
+                bid_df['expected_trend_pct'] = ((bid_df['expected_sales'] - bid_df['before_sales']) / bid_df['before_sales'] * 100).fillna(0)
+                bid_df['actual_change_pct'] = ((bid_df['observed_after_sales'] - bid_df['before_sales']) / bid_df['before_sales'] * 100).fillna(0)
+                bid_df['decision_value_pct'] = bid_df['actual_change_pct'] - bid_df['expected_trend_pct']
+                non_drag_df = bid_df[~((bid_df['expected_trend_pct'] < 0) & (bid_df['decision_value_pct'] < 0))]
+            
+            # Aggregate Decision Impact metrics (now excludes low-sample)
+            # NOTE: No Market Drag exclusion - sum ALL impacts for consistency with pre-refactor
+            # USE FINAL IMPACT (Weighted) if available
+            if 'final_impact_v33' in bid_df.columns:
+                impact_col = 'final_impact_v33'
+            elif 'final_decision_impact' in bid_df.columns:
+                impact_col = 'final_decision_impact'
+            else:
+                impact_col = 'decision_impact'
+            valid_impacts = bid_df[impact_col].dropna()
+            total_decision_impact = valid_impacts.sum() if len(valid_impacts) > 0 else 0
+            total_spend_avoided = bid_df['spend_avoided'].sum()
+            market_downshift_count = int(bid_df['market_downshift'].sum())
+            
+            # ==========================================
+            # UNIVERSAL ATTRIBUTED IMPACT (New Standard)
+            # ==========================================
+            # Matches Dashboard Hero logic exactly:
+            # 1. Scope: ALL Action Types (Bid, Harvest, Negative) - from full df, not bid_df
+            # 2. Maturity: MATURE actions only (exclude pending)
+            # 3. Market Drag: EXCLUDED (Counterfactual Logic)
+            attributed_impact_universal = 0
+            
+            # STALE CACHE GUARDRAIL: Backfill is_mature if missing
+            if 'is_mature' not in df.columns and 'actual_after_days' in df.columns:
+                 # Use window_days as proxy for requested after_days
+                 df['is_mature'] = df['actual_after_days'] >= window_days
+            
+            if not df.empty and 'decision_impact' in df.columns and 'is_mature' in df.columns:
+                # 1. Mature Only
+                mature_df = df[df['is_mature'] == True].copy()
+                
+                # Use Weighted Impact (prefer v3.3)
+                if 'final_impact_v33' in mature_df.columns:
+                    univ_impact_col = 'final_impact_v33'
+                elif 'final_decision_impact' in mature_df.columns:
+                    univ_impact_col = 'final_decision_impact'
+                else:
+                    univ_impact_col = 'decision_impact'
+                
+                # 2. Exclude Market Drag
+                if 'market_tag' in mature_df.columns:
+                    mature_no_drag = mature_df[mature_df['market_tag'] != 'Market Drag']
+                    attributed_impact_universal = mature_no_drag[univ_impact_col].sum()
+                else:
+                    attributed_impact_universal = mature_df[univ_impact_col].sum() # Fallback
+            
+            # Outcome percentages
+            outcome_counts = bid_df['outcome'].value_counts()
+            n_outcomes = len(bid_df)
+            pct_good = (outcome_counts.get('Good', 0) / n_outcomes * 100) if n_outcomes > 0 else 0
+            pct_neutral = (outcome_counts.get('Neutral', 0) / n_outcomes * 100) if n_outcomes > 0 else 0
+            pct_bad = (outcome_counts.get('Bad', 0) / n_outcomes * 100) if n_outcomes > 0 else 0
+            
+            # Z-Test on AGGREGATE values only (not individual actions)
+            n = len(bid_df)
+            if n >= 10 and roas_before > 0:
+                se_before = roas_before / np.sqrt(n)
+                se_after = roas_after / np.sqrt(n)
+                se_diff = np.sqrt(se_before**2 + se_after**2)
+                z_stat = (roas_after - roas_before) / se_diff if se_diff > 0 else 0
+                from scipy.stats import norm
+                p_value = 1 - norm.cdf(z_stat) if z_stat > 0 else 1.0
+            else:
+                p_value = 1.0
+                
+            is_significant = (p_value <= 0.10) and (roas_lift_pct > 0)
+            confidence_pct = (1 - p_value) * 100
+        else:
+            roas_before, roas_after, roas_lift_pct, incremental_revenue = 0, 0, 0, 0
+            p_value, is_significant, confidence_pct = 1.0, False, 0
+            total_decision_impact, total_spend_avoided = 0, 0
+            pct_good, pct_neutral, pct_bad = 0, 0, 0
+            market_downshift_count = 0
+            
+        # ==========================================
+        # 2. IMPLEMENTATION & WIN RATE (ALL IN DF)
+        # ==========================================
+        status = df['validation_status'].fillna('')
+        not_implemented = status.str.contains('NOT IMPLEMENTED|Source still active|Still has spend|Not validated', na=False, regex=True)
+        confirmed = status.str.contains('✓|CPC Validated|CPC Match|Directional|Normalized|Confirmed|Volume', na=False, regex=True)
+        pending = status.str.contains('Unverified|Preventative|Beat baseline only|No after data', na=False, regex=True)
+        
+        conf_count = int(confirmed.sum())
+        impl_rate = (conf_count / total_actions * 100) if total_actions > 0 else 0
+        winners = int(df['is_winner'].fillna(False).sum())
+        win_rate = (winners / total_actions * 100) if total_actions > 0 else 0
+        
+        # ==========================================
+        # 3. ACTION TYPE BREAKDOWN
+        # ==========================================
+        by_type = {}
+        # Identify impact column once for breakdown
+        if 'final_impact_v33' in df.columns:
+            breakdown_col = 'final_impact_v33'
+        elif 'final_decision_impact' in df.columns:
+            breakdown_col = 'final_decision_impact'
+        else:
+            breakdown_col = 'impact_score'
+        
+        for action_type in df['action_type'].unique():
+            type_data = df[df['action_type'] == action_type]
+            by_type[action_type] = {
+                'count': len(type_data),
+                'net_sales': type_data[breakdown_col].fillna(0).sum(),
+                'net_spend': type_data['delta_spend'].fillna(0).sum()
+            }
+        
+        return {
+            'total_actions': total_actions,
+            # Core ROAS metrics
+            'roas_before': round(roas_before, 2),
+            'roas_after': round(roas_after, 2),
+            'roas_lift_pct': round(roas_lift_pct, 1),
+            'incremental_revenue': round(incremental_revenue, 2),
+            # Statistical Significance
+            'p_value': round(p_value, 4),
+            'is_significant': is_significant,
+            'confidence_pct': round(confidence_pct, 1),
+            # Implementation & Validation
+            'implementation_rate': round(impl_rate, 1),
+            'confirmed_impact': conf_count,
+            'pending': int(pending.sum()),
+            'not_implemented': int(not_implemented.sum()),
+            # Decision Impact (Bid-Specific + Universal)
+            'decision_impact': round(total_decision_impact, 2),  # Legacy (Bids Only)
+            'attributed_impact_universal': round(attributed_impact_universal, 2), # New (All Mature)
+            'spend_avoided': round(total_spend_avoided, 2),
+            # Outcomes
+            'win_rate': round(win_rate, 1),
+            'winners': winners,
+            'losers': total_actions - winners,
+            'pct_good': round(pct_good, 1),
+            'pct_neutral': round(pct_neutral, 1),
+            'pct_bad': round(pct_bad, 1),
+            'market_downshift_count': market_downshift_count,
+            # Grouping
+            'by_action_type': by_type,
+            'period_info': {
+                'before_start': df['before_date'].min() if 'before_date' in df.columns else None,
+                'before_end': df['before_end_date'].max() if 'before_end_date' in df.columns else None,
+                'after_start': df['after_date'].min() if 'after_date' in df.columns else None,
+                'after_end': df['after_end_date'].max() if 'after_end_date' in df.columns else None
+            }
+        }
+    
+    def get_impact_summary(self, client_id: str, before_days: int = 14, after_days: int = 14) -> Dict[str, Any]:
+        """
+        Aggregate statistical summary of impact across all actions.
+        Returns both 'all' and 'validated' summaries for synchronized UI.
+        
+        Uses multi-horizon measurement:
+        - before_days: Fixed at 14 days (baseline period)
+        - after_days: 14, 30, or 60 days (measurement horizon)
+        """
+        impact_df = self.get_action_impact(client_id, before_days=before_days, after_days=after_days)
+        if impact_df.empty:
+            return {
+                'all': self._empty_summary(),
+                'validated': self._empty_summary()
+            }
+            
+        # Summary 1: ALL ACTIONS
+        summary_all = self._calculate_metrics_from_df(impact_df, after_days, label="ALL ACTIONS")
+        
+        # Summary 2: VALIDATED ACTIONS ONLY
+        # Pattern matches: ✓, CPC Validated, CPC Match, Directional, Confirmed, Normalized
+        validated_mask = impact_df['validation_status'].str.contains('✓|CPC Validated|CPC Match|Directional|Confirmed|Normalized|Volume|Strict', na=False, regex=True)
+        validated_df = impact_df[validated_mask].copy()
+        summary_validated = self._calculate_metrics_from_df(validated_df, after_days, label="VALIDATED ONLY")
+        
+        return {
+            'all': summary_all,
+            'validated': summary_validated,
+            # Common metadata
+            'period_info': summary_all.get('period_info')
+        }
+
+
+
+    # ==========================================
+    # REFERENCE DATA STATUS
+    # ==========================================
+    
+    def get_reference_data_status(self) -> Dict[str, Any]:
+        """Check reference data freshness for sidebar badge."""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    cursor.execute("""
+                        SELECT 
+                            COUNT(*) as record_count,
+                            MAX(updated_at) as latest_update
+                        FROM target_stats
+                    """)
+                    row = cursor.fetchone()
+                    
+                    if not row or row['record_count'] == 0:
+                        return {'exists': False, 'is_stale': True, 'days_ago': None, 'record_count': 0}
+                    
+                    latest = row['latest_update']
+                    if latest:
+                        days_ago = (datetime.now() - latest).days
+                        is_stale = days_ago > 14
+                    else:
+                        days_ago = None
+                        is_stale = True
+                    
+                    return {
+                        'exists': True,
+                        'is_stale': is_stale,
+                        'days_ago': days_ago,
+                        'record_count': row['record_count']
+                    }
+        except:
+            return {'exists': False, 'is_stale': True, 'days_ago': None, 'record_count': 0}
+
+    # ==========================================
+    # ACCOUNT MANAGEMENT
+    # ==========================================
+    
+    def update_account(self, account_id: str, account_name: str, account_type: str = None, metadata: dict = None) -> bool:
+        """Update an existing account."""
+        import json
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    if account_type and metadata:
+                        cursor.execute("""
+                            UPDATE accounts SET 
+                                account_name = %s, 
+                                account_type = %s, 
+                                metadata = %s,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE account_id = %s
+                        """, (account_name, account_type, json.dumps(metadata), account_id))
+                    elif account_type:
+                        cursor.execute("""
+                            UPDATE accounts SET 
+                                account_name = %s, 
+                                account_type = %s,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE account_id = %s
+                        """, (account_name, account_type, account_id))
+                    else:
+                        cursor.execute("""
+                            UPDATE accounts SET 
+                                account_name = %s,
+                                updated_at = CURRENT_TIMESTAMP
+                            WHERE account_id = %s
+                        """, (account_name, account_id))
+                    return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Failed to update account: {e}")
+            return False
+    
+    def reassign_data(self, from_account: str, to_account: str, start_date: str, end_date: str) -> int:
+        """Move data between accounts for a date range."""
+        with self._get_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                total_updated = 0
+                
+                # Update target_stats
+                cursor.execute("""
+                    UPDATE target_stats SET client_id = %s
+                    WHERE client_id = %s AND start_date BETWEEN %s AND %s
+                """, (to_account, from_account, start_date, end_date))
+                total_updated += cursor.rowcount
+                
+                # Update weekly_stats
+                cursor.execute("""
+                    UPDATE weekly_stats SET client_id = %s
+                    WHERE client_id = %s AND start_date BETWEEN %s AND %s
+                """, (to_account, from_account, start_date, end_date))
+                total_updated += cursor.rowcount
+                
+                # Update actions_log
+                cursor.execute("""
+                    UPDATE actions_log SET client_id = %s
+                    WHERE client_id = %s AND DATE(action_date) BETWEEN %s AND %s
+                """, (to_account, from_account, start_date, end_date))
+                total_updated += cursor.rowcount
+                
+                return total_updated
+    
+    def delete_account(self, account_id: str) -> bool:
+        """Delete an account and all its data."""
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                    # Delete related data first
+                    cursor.execute("DELETE FROM target_stats WHERE client_id = %s", (account_id,))
+                    cursor.execute("DELETE FROM weekly_stats WHERE client_id = %s", (account_id,))
+                    cursor.execute("DELETE FROM actions_log WHERE client_id = %s", (account_id,))
+                    cursor.execute("DELETE FROM category_mappings WHERE client_id = %s", (account_id,))
+                    cursor.execute("DELETE FROM advertised_product_cache WHERE client_id = %s", (account_id,))
+                    cursor.execute("DELETE FROM bulk_mappings WHERE client_id = %s", (account_id,))
+                    cursor.execute("DELETE FROM account_health_metrics WHERE client_id = %s", (account_id,))
+                    # Delete account
+                    cursor.execute("DELETE FROM accounts WHERE account_id = %s", (account_id,))
+                    return True
+        except Exception as e:
+            print(f"Failed to delete account: {e}")
+            return False
+    
+    # ==========================================
+    # SHARED REPORT OPERATIONS
+    # ==========================================
+
+    def save_shared_report(self, client_id: str, date_range: str, metadata: dict = None) -> str:
+        """
+        Save shareable report and return unique ID (Postgres).
+        
+        Returns:
+            8-character unique report ID
+        """
+        import uuid
+        import json
+        from datetime import datetime, timedelta
+        
+        report_id = str(uuid.uuid4())[:8]
+        
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                # Rate limit check (10 per 24 hours)
+                cur.execute("""
+                    SELECT COUNT(*) 
+                    FROM shared_reports 
+                    WHERE client_id = %s 
+                    AND created_at > NOW() - INTERVAL '24 hours'
+                """, (client_id,))
+                
+                count = cur.fetchone()[0]
+                if count >= 10:
+                    raise ValueError("Rate limit exceeded: Maximum 10 shares per 24 hours")
+                
+                # Save report (expires in 30 days)
+                expires_at = datetime.now() + timedelta(days=30)
+                
+                cur.execute("""
+                    INSERT INTO shared_reports 
+                    (id, client_id, date_range, expires_at, metadata)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    report_id,
+                    client_id,
+                    date_range,
+                    expires_at,
+                    json.dumps(metadata or {})
+                ))
+        
+        return report_id
+
+    def get_shared_report(self, report_id: str) -> dict:
+        """
+        Retrieve shared report data (Postgres).
+        
+        Returns:
+            Dict with report metadata
+            
+        Raises:
+            ValueError if not found or expired
+        """
+        import json
+        from datetime import datetime
+        
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT 
+                        client_id, date_range, created_at, 
+                        expires_at, metadata, accessed_count
+                    FROM shared_reports
+                    WHERE id = %s
+                """, (report_id,))
+                
+                row = cur.fetchone()
+                
+                if not row:
+                    raise ValueError(f"Report not found: {report_id}")
+                
+                # Row is a tuple in psycopg2 unless RealDictCursor is used, 
+                # but let's safely handle tuple or dict access depending on configured factory
+                if isinstance(row, dict):
+                    client_id = row['client_id']
+                    date_range = row['date_range']
+                    created_at = row['created_at']
+                    expires_at = row['expires_at']
+                    metadata_json = row['metadata']
+                    access_count = row['accessed_count']
+                else:
+                    client_id, date_range, created_at, expires_at, metadata_json, access_count = row
+                
+                # Check expiration
+                if datetime.now() > expires_at:
+                    raise ValueError(f"Report expired on {expires_at.strftime('%Y-%m-%d')}")
+                
+                # Increment access counter
+                cur.execute("""
+                    UPDATE shared_reports
+                    SET accessed_count = accessed_count + 1,
+                        last_accessed = CURRENT_TIMESTAMP
+                    WHERE id = %s
+                """, (report_id,))
+                
+                return {
+                    'client_id': client_id,
+                    'date_range': date_range,
+                    'created_at': created_at,
+                    'metadata': metadata_json if isinstance(metadata_json, dict) else json.loads(metadata_json) if metadata_json else {},
+                    'expired': False,
+                    'views': (access_count or 0) + 1
+                }
+
+    # =========================================================
+    # Timeline-Based ROAS Methods (v3.5)
+    # =========================================================
+
+    def get_earliest_data_date(self, client_id: str) -> Optional[date]:
+        """
+        Get the earliest available data date for an account.
+
+        Args:
+            client_id: Account ID
+
+        Returns:
+            Earliest start_date in target_stats, or None if no data
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT MIN(start_date)::date
+                    FROM target_stats
+                    WHERE client_id = %s
+                """, (client_id,))
+
+                row = cur.fetchone()
+                return row[0] if row and row[0] else None
+
+    def get_latest_data_date(self, client_id: str) -> Optional[date]:
+        """
+        Get the latest available data date for an account.
+
+        Args:
+            client_id: Account ID
+
+        Returns:
+            Latest start_date in target_stats, or None if no data
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT MAX(start_date)::date
+                    FROM target_stats
+                    WHERE client_id = %s
+                """, (client_id,))
+
+                row = cur.fetchone()
+                return row[0] if row and row[0] else None
+
+    def get_account_performance(
+        self,
+        client_id: str,
+        start_date: date,
+        end_date: date
+    ) -> Dict[str, float]:
+        """
+        Get aggregated account performance for a specific date range.
+
+        This is used for timeline-based ROAS calculation to measure
+        account performance in clean 30-day periods.
+
+        Args:
+            client_id: Account ID
+            start_date: Period start date (inclusive)
+            end_date: Period end date (inclusive)
+
+        Returns:
+            Dict with 'spend', 'sales', 'clicks', 'impressions'
+        """
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        COALESCE(SUM(spend), 0) as spend,
+                        COALESCE(SUM(sales), 0) as sales,
+                        COALESCE(SUM(clicks), 0) as clicks,
+                        COALESCE(SUM(impressions), 0) as impressions
+                    FROM target_stats
+                    WHERE client_id = %s
+                      AND start_date >= %s
+                      AND start_date <= %s
+                """, (client_id, start_date, end_date))
+
+                row = cur.fetchone()
+
+                if row:
+                    if isinstance(row, dict):
+                        return {
+                            'spend': float(row['spend']),
+                            'sales': float(row['sales']),
+                            'clicks': int(row['clicks']),
+                            'impressions': int(row['impressions'])
+                        }
+                    else:
+                        return {
+                            'spend': float(row[0]),
+                            'sales': float(row[1]),
+                            'clicks': int(row[2]),
+                            'impressions': int(row[3])
+                        }
+                else:
+                    return {
+                        'spend': 0.0,
+                        'sales': 0.0,
+                        'clicks': 0,
+                        'impressions': 0
+                    }

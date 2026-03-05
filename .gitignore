@@ -1,0 +1,41 @@
+# OS
+.DS_Store
+
+# AI / editor tooling
+.agent/
+.agents/
+.claude/
+.gemini/
+.opencode/
+.vscode/
+
+# Logs
+*.log
+
+# Python
+venv/
+venv311/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Secrets
+.env
+.env.*
+.streamlit/secrets.toml
+**/secrets.toml
+
+# Local databases
+*.db
+*.sqlite
+
+# Reports / generated output
+reports/
+
+# Data files (keep schema, not raw data)
+data/*.csv
+data/*.xlsx
+data/*.json
+data/*.db
