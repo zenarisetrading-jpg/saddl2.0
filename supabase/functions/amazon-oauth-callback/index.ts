@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { MARKETPLACE_REGION_MAP } from "../_shared/marketplace_config.ts";
 
 const AMAZON_TOKEN_URL = "https://api.amazon.com/auth/o2/token";
-const STREAMLIT_APP_URL = "https://saddle-adpulse.streamlit.app";
+const STREAMLIT_APP_URL = "https://saddl-adpulsev2.streamlit.app";
 
 // Regional SP-API endpoints to probe for marketplace discovery, in priority order.
 const REGION_ENDPOINTS = [
