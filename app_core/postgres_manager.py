@@ -1034,7 +1034,21 @@ class PostgresManager:
         targeting_col = next((c for c in ['Targeting', 'targeting'] if c in df.columns), None)
         cst_col = next((c for c in ['Customer Search Term', 'customer_search_term'] if c in df.columns), None)
         mt_col = next((c for c in ['Match Type', 'match_type'] if c in df.columns), None)
-        
+
+        # Sales / orders — Amazon STR column names vary by marketplace currency symbol:
+        #   UAE: '7 Day Total Sales '  (trailing space, no symbol)
+        #   IN:  '7 Day Total Sales (₹)'
+        #   US:  '7 Day Total Sales ($)'  etc.
+        # Match by prefix so any currency suffix is handled automatically.
+        sales_col  = next(
+            (c for c in df.columns if c.strip().startswith('7 Day Total Sales')),
+            next((c for c in ['Sales', 'sales'] if c in df.columns), None)
+        )
+        orders_col = next(
+            (c for c in df.columns if c.strip().startswith('7 Day Total Orders')),
+            next((c for c in ['Orders', 'orders'] if c in df.columns), None)
+        )
+
         # Detect End Date column for multi-day prorating
         end_date_col = next((c for c in ['End Date', 'end_date'] if c in df.columns), None)
 
@@ -1059,8 +1073,8 @@ class PostgresManager:
             impressions_total = int(row.get('Impressions', 0) or 0)
             clicks_total      = int(row.get('Clicks', 0) or 0)
             spend_total       = float(row.get('Spend', 0) or 0)
-            sales_total       = float(row.get('Sales', 0) or 0)
-            orders_total      = int(row.get('Orders', 0) or 0)
+            sales_total       = float(row[sales_col] if sales_col and pd.notna(row.get(sales_col)) else 0) or 0
+            orders_total      = int(row[orders_col] if orders_col and pd.notna(row.get(orders_col)) else 0) or 0
 
             camp  = str(row[camp_col]).lower().strip() if pd.notna(row[camp_col]) else ''
             ag    = str(row[ag_col]).lower().strip() if pd.notna(row[ag_col]) else ''
