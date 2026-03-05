@@ -2,6 +2,19 @@ import streamlit as st
 import plotly.graph_objects as go
 
 
+# ─── helpers ──────────────────────────────────────────────────────────────────
+
+def _fmt(val: float, currency: str, sign: str = "") -> str:
+    """Format a number as compact currency string (e.g. AED9.2K, -INR56.9K)."""
+    if abs(val) >= 1_000_000:
+        return f"{sign}{currency}{val / 1_000_000:.1f}M"
+    elif abs(val) >= 1_000:
+        return f"{sign}{currency}{val / 1_000:.1f}K"
+    return f"{sign}{currency}{val:,.0f}"
+
+
+# ─── Spend Reallocation ───────────────────────────────────────────────────────
+
 def render_spend_reallocation_chart(
     total_spend_ref: float,
     neg_spend_saving: float,
@@ -9,43 +22,84 @@ def render_spend_reallocation_chart(
     reallocated: float,
     currency: str = "USD",
 ) -> None:
-    """Horizontal waterfall chart showing how 14-day spend is being optimised."""
-    labels   = ["Current", "Negatives", "Bid Downs", "Reallocated"]
-    values   = [total_spend_ref, neg_spend_saving, bid_saving, reallocated]
-    colors   = ["#6366f1", "#ef4444", "#f59e0b", "#22c55e"]
-    sign_pfx = ["", "-", "-", "+"]
-    texts    = [f"{sign_pfx[i]}{currency}{v:,.0f}" for i, v in enumerate(values)]
+    """
+    Styled card with horizontal progress-bar rows — matches local app design.
+    Rows: Current (gray) | Negatives (red) | Bid Downs (amber) | Reallocated (green)
+    Each bar width is proportional to total_spend_ref.
+    """
+    safe_ref = total_spend_ref if total_spend_ref > 0 else 1
 
-    fig = go.Figure(go.Bar(
-        y=labels,
-        x=values,
-        orientation="h",
-        marker_color=colors,
-        text=texts,
-        textposition="outside",
-        textfont=dict(size=12, color="#e2e8f0"),
-        cliponaxis=False,
-    ))
-    fig.update_layout(
-        title=dict(text="Spend Reallocation", font=dict(size=13, color="#94a3b8")),
-        annotations=[dict(
-            text="How 14-day spend is being optimized",
-            xref="paper", yref="paper",
-            x=0, y=1.12,
-            showarrow=False,
-            font=dict(size=11, color="#64748b"),
-        )],
-        height=220,
-        margin=dict(t=55, b=10, l=10, r=100),
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#e2e8f0"),
-        showlegend=False,
-        xaxis=dict(showgrid=False, visible=False),
-        yaxis=dict(showgrid=False, autorange="reversed"),
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    rows = [
+        {
+            "label":   "Current",
+            "value":   total_spend_ref,
+            "pct":     100.0,
+            "color":   "#475569",
+            "txt_col": "#cbd5e1",
+            "prefix":  "",
+        },
+        {
+            "label":   "Negatives",
+            "value":   neg_spend_saving,
+            "pct":     min(neg_spend_saving / safe_ref * 100, 100),
+            "color":   "#ef4444",
+            "txt_col": "#ef4444",
+            "prefix":  "-",
+        },
+        {
+            "label":   "Bid Downs",
+            "value":   bid_saving,
+            "pct":     min(bid_saving / safe_ref * 100, 100),
+            "color":   "#f59e0b",
+            "txt_col": "#f59e0b",
+            "prefix":  "-",
+        },
+        {
+            "label":   "Reallocated",
+            "value":   reallocated,
+            "pct":     min(reallocated / safe_ref * 100, 100),
+            "color":   "#22c55e",
+            "txt_col": "#22c55e",
+            "prefix":  "+",
+        },
+    ]
 
+    bar_rows_html = ""
+    for r in rows:
+        label_fmt = _fmt(r["value"], currency, r["prefix"])
+        bar_rows_html += f"""
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+          <div style="width:86px;text-align:right;font-size:12px;color:#64748b;
+                      white-space:nowrap;flex-shrink:0;">{r['label']}</div>
+          <div style="flex:1;background:#1e293b;border-radius:4px;height:8px;overflow:hidden;">
+            <div style="width:{r['pct']:.1f}%;background:{r['color']};
+                        border-radius:4px;height:100%;
+                        transition:width .4s ease;"></div>
+          </div>
+          <div style="width:76px;text-align:right;font-size:12px;font-weight:600;
+                      color:{r['txt_col']};white-space:nowrap;flex-shrink:0;">{label_fmt}</div>
+        </div>"""
+
+    html = f"""
+    <div style="
+      background:#0f172a;
+      border:1px solid #1e293b;
+      border-radius:16px;
+      padding:20px 24px 16px 24px;
+    ">
+      <div style="font-size:15px;font-weight:600;color:#f1f5f9;margin-bottom:3px;">
+        Spend Reallocation
+      </div>
+      <div style="font-size:12px;color:#475569;margin-bottom:20px;">
+        How 14-day spend is being optimized
+      </div>
+      {bar_rows_html}
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# ─── Action Distribution ──────────────────────────────────────────────────────
 
 def render_action_distribution_chart(
     action_count: int,
@@ -53,49 +107,74 @@ def render_action_distribution_chart(
     neg_count: int,
     harv_count: int,
 ) -> None:
-    """Donut chart showing distribution of optimizer actions."""
+    """
+    Styled card with donut chart — matches local app design.
+    Total count in centre, legend with exact counts at bottom.
+    Colors: Bids=teal, Negatives=blue, Harvest=amber.
+    """
     labels = ["Bids", "Negatives", "Harvest"]
     values = [bid_count, neg_count, harv_count]
-    colors = ["#6366f1", "#ef4444", "#22c55e"]
+    colors = ["#22d3ee", "#3b82f6", "#f59e0b"]
 
-    # Filter out zero values
     filtered = [(l, v, c) for l, v, c in zip(labels, values, colors) if v > 0]
     if not filtered:
         st.caption("No actions to display.")
         return
 
     f_labels, f_values, f_colors = zip(*filtered)
-
-    fig = go.Figure(go.Pie(
-        labels=list(f_labels),
-        values=list(f_values),
-        hole=0.60,
-        marker_colors=list(f_colors),
-        textinfo="none",
-        hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
-        customdata=list(f_values),
-    ))
-
-    # Count in center of donut
-    fig.add_annotation(
-        text=f"<b>{action_count}</b><br><span style='font-size:11px;color:#94a3b8'>Actions</span>",
-        x=0.5, y=0.5,
-        font=dict(size=22, color="#e2e8f0"),
-        showarrow=False,
-        xref="paper", yref="paper",
-    )
-
-    # Legend with exact counts
     legend_labels = [f"{l} ({v})" for l, v in zip(f_labels, f_values)]
 
-    fig.update_traces(
+    fig = go.Figure(go.Pie(
         labels=legend_labels,
+        values=list(f_values),
+        hole=0.62,
+        marker=dict(colors=list(f_colors), line=dict(color="#0f172a", width=2)),
+        textinfo="none",
+        hovertemplate="%{label}: %{value}<extra></extra>",
+    ))
+
+    # Count + label in centre
+    fig.add_annotation(
+        text=(
+            f"<b style='font-size:26px'>{action_count}</b>"
+            f"<br><span style='font-size:11px;color:#94a3b8'>Actions</span>"
+        ),
+        x=0.5, y=0.5,
+        showarrow=False,
+        font=dict(color="#f1f5f9", size=26),
+        xref="paper", yref="paper",
+        align="center",
     )
 
     fig.update_layout(
-        title=dict(text="Action Distribution", font=dict(size=13, color="#94a3b8")),
-        height=280,
-        margin=dict(t=40, b=10, l=10, r=10),
+        title=dict(
+            text="Action Distribution",
+            font=dict(size=15, color="#f1f5f9"),
+            x=0,
+            xanchor="left",
+        ),
+        annotations=[
+            # subtitle
+            dict(
+                text=f"Breakdown of {action_count} optimization actions",
+                xref="paper", yref="paper",
+                x=0, y=1.02,
+                showarrow=False,
+                font=dict(size=11, color="#475569"),
+                xanchor="left",
+            ),
+            # centre count
+            dict(
+                text=f"<b>{action_count}</b><br><span style='font-size:11px'>Actions</span>",
+                x=0.5, y=0.5,
+                showarrow=False,
+                font=dict(size=24, color="#f1f5f9"),
+                xref="paper", yref="paper",
+                align="center",
+            ),
+        ],
+        height=300,
+        margin=dict(t=55, b=10, l=10, r=10),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#e2e8f0"),
@@ -103,10 +182,11 @@ def render_action_distribution_chart(
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.15,
+            y=-0.08,
             xanchor="center",
             x=0.5,
-            font=dict(size=11),
+            font=dict(size=11, color="#94a3b8"),
+            bgcolor="rgba(0,0,0,0)",
         ),
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
