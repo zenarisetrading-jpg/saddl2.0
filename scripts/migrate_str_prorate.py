@@ -1,8 +1,11 @@
 """
-STR Prorate Migration Script
-=============================
-Flushes raw_search_term_data for a client over the Excel's date range,
-then re-ingests with the new prorating logic (multi-day rows split into daily rows).
+STR Re-ingest Script
+=====================
+Flushes raw_search_term_data for a client over the file's date range,
+then re-ingests from a daily-granularity STR export (Time Unit = Daily).
+
+Use this to fix data that was previously uploaded with the old proration logic
+or from a date-range export.  The replacement file must use daily granularity.
 
 Usage:
     python scripts/migrate_str_prorate.py --client tbs --file "/path/to/file.xlsx" [--dry-run]
@@ -30,24 +33,33 @@ def load_db_url():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--client", required=True, help="client_id in DB e.g. tbs")
-    parser.add_argument("--file", required=True, help="Path to Excel STR file")
+    parser.add_argument("--file", required=True, help="Path to daily-granularity STR Excel file")
     parser.add_argument("--dry-run", action="store_true", help="Preview only, no DB changes")
     args = parser.parse_args()
 
     db_url = load_db_url()
 
-    # Load Excel
+    # Load file
     print(f"\nLoading: {args.file}")
     df = pd.read_excel(args.file)
-    df['Start Date'] = pd.to_datetime(df['Start Date'])
-    df['End Date'] = pd.to_datetime(df['End Date'])
 
-    min_date = df['Start Date'].min().date()
-    max_date = df['End Date'].max().date()
-    total_spend = df['Spend'].sum()
+    # Detect date column — daily exports use 'Date'
+    date_col = next((c for c in ['Date', 'Start Date', 'date'] if c in df.columns), None)
+    if date_col is None:
+        print("ERROR: No date column found. Expected 'Date' from a daily-granularity export.")
+        return
+
+    if 'End Date' in df.columns or 'end_date' in df.columns:
+        print("WARNING: 'End Date' column detected — this looks like a date-range export, not daily.")
+        print("         Re-export from Campaign Manager with Time Unit = Daily and retry.")
+
+    df[date_col] = pd.to_datetime(df[date_col])
+    min_date = df[date_col].min().date()
+    max_date = df[date_col].max().date()
+    total_spend = df['Spend'].sum() if 'Spend' in df.columns else 0
     total_rows = len(df)
 
-    print(f"Excel: {total_rows} rows | {min_date} → {max_date} | Spend: {total_spend:.2f}")
+    print(f"File:  {total_rows} rows | {min_date} → {max_date} | Spend: {total_spend:.2f}")
 
     # Check current DB state
     conn = psycopg2.connect(db_url, connect_timeout=15)
@@ -58,7 +70,7 @@ def main():
         WHERE client_id = %s AND report_date BETWEEN %s AND %s
     """, (args.client, min_date, max_date))
     row = cur.fetchone()
-    print(f"\nDB before: {row[2]} → {row[3]} | {row[0]} rows | Spend: {row[1]}")
+    print(f"DB before: {row[2]} → {row[3]} | {row[0]} rows | Spend: {row[1]}")
 
     if args.dry_run:
         print("\n[DRY RUN] Would delete and re-ingest. No changes made.")
@@ -74,7 +86,7 @@ def main():
         conn.close()
         return
 
-    # Delete
+    # Delete existing rows for the date range
     cur.execute("""
         DELETE FROM raw_search_term_data
         WHERE client_id = %s AND report_date BETWEEN %s AND %s
@@ -85,13 +97,13 @@ def main():
     cur.close()
     conn.close()
 
-    # Re-ingest with new prorating logic
-    print("Re-ingesting with prorating logic...")
+    # Re-ingest as daily data (no proration)
+    print("Re-ingesting as daily data...")
     db = PostgresManager(db_url)
     saved = db.save_raw_search_term_data(df, args.client)
     print(f"Saved {saved} rows.")
 
-    # Verify
+    # Verify totals match
     conn = psycopg2.connect(db_url, connect_timeout=15)
     cur = conn.cursor()
     cur.execute("""
@@ -100,8 +112,8 @@ def main():
         WHERE client_id = %s AND report_date BETWEEN %s AND %s
     """, (args.client, min_date, max_date))
     row = cur.fetchone()
-    print(f"\nDB after:  {row[2]} → {row[3]} | {row[0]} rows | Spend: {row[1]}")
-    print(f"Excel total:                                    Spend: {total_spend:.2f}")
+    print(f"DB after:  {row[2]} → {row[3]} | {row[0]} rows | Spend: {row[1]}")
+    print(f"File total:                                     Spend: {total_spend:.2f}")
     diff = float(row[1] or 0) - total_spend
     print(f"Difference: {diff:.2f} (should be ~0.00)")
     cur.close()

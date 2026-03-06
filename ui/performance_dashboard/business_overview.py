@@ -523,24 +523,38 @@ def fetch_business_overview_data(
             GROUP BY client_id, campaign_name
             HAVING COUNT(DISTINCT asin) = 1
         ),
+        ad_group_single_asin AS (
+            SELECT
+                client_id,
+                campaign_name,
+                ad_group_name,
+                MIN(asin) AS asin
+            FROM apc_exact
+            GROUP BY client_id, campaign_name, ad_group_name
+            HAVING COUNT(DISTINCT asin) = 1
+        ),
         spend_mapped_rows AS (
             SELECT
-                COALESCE(ex.asin, csa.asin) AS asin,
+                COALESCE(ex.asin, agsa.asin, csa.asin) AS asin,
                 COALESCE(ex.sku, '') AS sku,
                 SUM(COALESCE(rst.spend, 0)) AS ad_spend,
                 SUM(COALESCE(rst.sales, 0)) AS ad_sales
             FROM raw_search_term_data rst
             LEFT JOIN apc_exact ex
               ON ex.client_id = rst.client_id
-             AND ex.campaign_name = rst.campaign_name
-             AND ex.ad_group_name = rst.ad_group_name
+             AND LOWER(ex.campaign_name) = LOWER(rst.campaign_name)
+             AND LOWER(ex.ad_group_name) = LOWER(rst.ad_group_name)
+            LEFT JOIN ad_group_single_asin agsa
+              ON agsa.client_id = rst.client_id
+             AND LOWER(agsa.campaign_name) = LOWER(rst.campaign_name)
+             AND LOWER(agsa.ad_group_name) = LOWER(rst.ad_group_name)
             LEFT JOIN campaign_single_asin csa
               ON csa.client_id = rst.client_id
-             AND csa.campaign_name = rst.campaign_name
+             AND LOWER(csa.campaign_name) = LOWER(rst.campaign_name)
             WHERE rst.client_id = %s
               AND rst.report_date BETWEEN %s AND %s
-              AND COALESCE(ex.asin, csa.asin) IS NOT NULL
-            GROUP BY COALESCE(ex.asin, csa.asin), COALESCE(ex.sku, '')
+              AND COALESCE(ex.asin, agsa.asin, csa.asin) IS NOT NULL
+            GROUP BY COALESCE(ex.asin, agsa.asin, csa.asin), COALESCE(ex.sku, '')
         ),
         spend_by_asin AS (
             SELECT
@@ -563,8 +577,6 @@ def fetch_business_overview_data(
             SELECT asin FROM sales_by_asin
             UNION
             SELECT asin FROM spend_by_asin
-            UNION
-            SELECT asin FROM latest_inv
         ),
         child_level AS (
             SELECT
@@ -829,7 +841,7 @@ def prepare_product_performance_table(df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(
             columns=[
                 "ASIN",
-                "Parent ASIN / SKU",
+                "SKU",
                 "Revenue",
                 "TACOS",
                 "CVR",
@@ -854,7 +866,7 @@ def prepare_product_performance_table(df: pd.DataFrame) -> pd.DataFrame:
 
     out["CVR"] = out.apply(lambda r: calculate_cvr(r.get("units", 0), r.get("sessions", 0)) or 0.0, axis=1)
     out["TACOS"] = out.apply(lambda r: calculate_tacos(r.get("ad_spend", 0), r.get("sales", 0)) or 0.0, axis=1)
-    out["Parent ASIN / SKU"] = out.get("parent_asin_sku", out.get("asin", "")).fillna(out.get("sku", ""))
+    out["SKU"] = out.get("sku", out.get("asin", "")).fillna("")
 
     def _status(days: Any) -> str:
         val = _safe_float(days, default=-1)
@@ -870,7 +882,7 @@ def prepare_product_performance_table(df: pd.DataFrame) -> pd.DataFrame:
     result = out[
         [
             "asin",
-            "Parent ASIN / SKU",
+            "SKU",
             "sales",
             "TACOS",
             "CVR",
@@ -889,7 +901,7 @@ def prepare_product_performance_table(df: pd.DataFrame) -> pd.DataFrame:
             "days_of_cover": "Stock Days",
         }
     )
-    return result.sort_values("TACOS", ascending=False).reset_index(drop=True)
+    return result.sort_values("Revenue", ascending=False).reset_index(drop=True)
 
 
 def _merge_trend_frame(
@@ -1214,7 +1226,7 @@ def _render_product_table(df: pd.DataFrame, currency: str) -> None:
                 </tr>
                 """
             ).strip().format(
-                parent=row.get("Parent ASIN / SKU", "-"),
+                parent=row.get("SKU", "-"),
                 revenue=_format_currency(_safe_float(row.get("Revenue")), currency),
                 tacos=_format_percent(_safe_float(row.get("TACOS"), None)),
                 cvr=_format_percent(_safe_float(row.get("CVR"), None)),
@@ -1230,7 +1242,7 @@ def _render_product_table(df: pd.DataFrame, currency: str) -> None:
             <table class="bo-table">
                 <thead>
                     <tr>
-                        <th>Parent Product</th>
+                        <th>SKU</th>
                         <th>Revenue</th>
                         <th>TACOS</th>
                         <th>CVR</th>
@@ -1288,8 +1300,9 @@ def _generate_inventory_summary(product_table: pd.DataFrame) -> Dict[str, float]
     }
 
 
+@st.cache_data(ttl=600)
 def _fetch_inventory_activity_frame(
-    db,
+    _db,
     *,
     client_id: str,
     account_id: str,
@@ -1327,56 +1340,78 @@ def _fetch_inventory_activity_frame(
             GROUP BY client_id, campaign_name
             HAVING COUNT(DISTINCT asin) = 1
         ),
+        ad_group_single_asin AS (
+            SELECT
+                client_id,
+                campaign_name,
+                ad_group_name,
+                MIN(asin) AS asin
+            FROM apc_exact
+            GROUP BY client_id, campaign_name, ad_group_name
+            HAVING COUNT(DISTINCT asin) = 1
+        ),
         spend_60 AS (
             SELECT
-                COALESCE(ex.asin, csa.asin) AS asin,
+                COALESCE(ex.asin, agsa.asin, csa.asin) AS asin,
                 SUM(COALESCE(rst.spend, 0)) AS ad_spend_60d
             FROM raw_search_term_data rst
             LEFT JOIN apc_exact ex
               ON ex.client_id = rst.client_id
-             AND ex.campaign_name = rst.campaign_name
-             AND ex.ad_group_name = rst.ad_group_name
+             AND LOWER(ex.campaign_name) = LOWER(rst.campaign_name)
+             AND LOWER(ex.ad_group_name) = LOWER(rst.ad_group_name)
+            LEFT JOIN ad_group_single_asin agsa
+              ON agsa.client_id = rst.client_id
+             AND LOWER(agsa.campaign_name) = LOWER(rst.campaign_name)
+             AND LOWER(agsa.ad_group_name) = LOWER(rst.ad_group_name)
             LEFT JOIN campaign_single_asin csa
               ON csa.client_id = rst.client_id
-             AND csa.campaign_name = rst.campaign_name
+             AND LOWER(csa.campaign_name) = LOWER(rst.campaign_name)
             WHERE rst.client_id = %s
               AND rst.report_date BETWEEN %s AND %s
-              AND COALESCE(ex.asin, csa.asin) IS NOT NULL
-            GROUP BY COALESCE(ex.asin, csa.asin)
+              AND COALESCE(ex.asin, agsa.asin, csa.asin) IS NOT NULL
+            GROUP BY COALESCE(ex.asin, agsa.asin, csa.asin)
         ),
         spend_7 AS (
             SELECT
-                COALESCE(ex.asin, csa.asin) AS asin,
+                COALESCE(ex.asin, agsa.asin, csa.asin) AS asin,
                 SUM(COALESCE(rst.spend, 0)) AS ad_spend_7d
             FROM raw_search_term_data rst
             LEFT JOIN apc_exact ex
               ON ex.client_id = rst.client_id
-             AND ex.campaign_name = rst.campaign_name
-             AND ex.ad_group_name = rst.ad_group_name
+             AND LOWER(ex.campaign_name) = LOWER(rst.campaign_name)
+             AND LOWER(ex.ad_group_name) = LOWER(rst.ad_group_name)
+            LEFT JOIN ad_group_single_asin agsa
+              ON agsa.client_id = rst.client_id
+             AND LOWER(agsa.campaign_name) = LOWER(rst.campaign_name)
+             AND LOWER(agsa.ad_group_name) = LOWER(rst.ad_group_name)
             LEFT JOIN campaign_single_asin csa
               ON csa.client_id = rst.client_id
-             AND csa.campaign_name = rst.campaign_name
+             AND LOWER(csa.campaign_name) = LOWER(rst.campaign_name)
             WHERE rst.client_id = %s
               AND rst.report_date BETWEEN %s AND %s
-              AND COALESCE(ex.asin, csa.asin) IS NOT NULL
-            GROUP BY COALESCE(ex.asin, csa.asin)
+              AND COALESCE(ex.asin, agsa.asin, csa.asin) IS NOT NULL
+            GROUP BY COALESCE(ex.asin, agsa.asin, csa.asin)
         ),
         actions_60 AS (
             SELECT
-                COALESCE(ex.asin, csa.asin) AS asin,
+                COALESCE(ex.asin, agsa.asin, csa.asin) AS asin,
                 COUNT(*) AS actions_60d
             FROM actions_log al
             LEFT JOIN apc_exact ex
               ON ex.client_id = al.client_id
-             AND ex.campaign_name = al.campaign_name
-             AND ex.ad_group_name = al.ad_group_name
+             AND LOWER(ex.campaign_name) = LOWER(al.campaign_name)
+             AND LOWER(ex.ad_group_name) = LOWER(al.ad_group_name)
+            LEFT JOIN ad_group_single_asin agsa
+              ON agsa.client_id = al.client_id
+             AND LOWER(agsa.campaign_name) = LOWER(al.campaign_name)
+             AND LOWER(agsa.ad_group_name) = LOWER(al.ad_group_name)
             LEFT JOIN campaign_single_asin csa
               ON csa.client_id = al.client_id
-             AND csa.campaign_name = al.campaign_name
+             AND LOWER(csa.campaign_name) = LOWER(al.campaign_name)
             WHERE al.client_id = %s
               AND DATE(al.action_date) BETWEEN %s AND %s
-              AND COALESCE(ex.asin, csa.asin) IS NOT NULL
-            GROUP BY COALESCE(ex.asin, csa.asin)
+              AND COALESCE(ex.asin, agsa.asin, csa.asin) IS NOT NULL
+            GROUP BY COALESCE(ex.asin, agsa.asin, csa.asin)
         ),
         latest_inv AS (
             SELECT DISTINCT ON (asin)
@@ -1462,7 +1497,7 @@ def _fetch_inventory_activity_frame(
         client_id, start_7, end_date,
     )
     try:
-        df = _to_df_query(db, q, params)
+        df = _to_df_query(_db, q, params)
     except Exception:
         df = pd.DataFrame(
             columns=[
@@ -1541,21 +1576,20 @@ def _generate_inventory_summary_filtered(
             "ad_spend_low_stock_week": 0.0,
             "inactive_excluded": inactive_excluded,
             "low_stock_asin_count": 0.0,
+            "weighted_top_n": 0,
             "debug_mapped_spend_7d": float(act["debug_mapped_spend_7d"].max() if "debug_mapped_spend_7d" in act.columns else 0.0),
             "debug_unmapped_spend_7d": float(act["debug_unmapped_spend_7d"].max() if "debug_unmapped_spend_7d" in act.columns else 0.0),
             "debug_raw_spend_7d": float(act["debug_raw_spend_7d"].max() if "debug_raw_spend_7d" in act.columns else 0.0),
             "audit_formula": "sum(ad_spend_7d for low-stock active ASINs)",
         }
 
-    total_rev = active["Revenue"].sum()
-    top = active.sort_values("Revenue", ascending=False).copy()
-    if total_rev > 0:
-        top["cum_share"] = top["Revenue"].cumsum() / total_rev
-        top = top[top["cum_share"] <= 0.8] if (top["cum_share"] <= 0.8).any() else top.head(min(len(top), 5))
+    top_n = min(len(active), 75)
+    top = active.sort_values("Revenue", ascending=False).head(top_n)
     weights = top["Revenue"].clip(lower=0)
     weighted_days = (top["Stock Days"].fillna(0) * weights).sum() / weights.sum() if weights.sum() > 0 else top["Stock Days"].fillna(0).mean()
 
-    low_stock = active[active["is_low_stock"] > 0].copy()
+    oos_mask = active["Stock Days"].fillna(-1) == 0
+    low_stock = active[(active["is_low_stock"] > 0) | oos_mask].copy()
     if low_stock.empty:
         low_stock = active[active["Stock Days"].fillna(0) < 14].copy()
     if low_stock.empty:
@@ -1574,6 +1608,7 @@ def _generate_inventory_summary_filtered(
         "ad_spend_low_stock_week": ad_spend_7d_low_stock,
         "inactive_excluded": inactive_excluded,
         "low_stock_asin_count": float(low_stock["ASIN"].nunique() if "ASIN" in low_stock.columns else len(low_stock)),
+        "weighted_top_n": top_n,
         "debug_mapped_spend_7d": float(act["debug_mapped_spend_7d"].max() if "debug_mapped_spend_7d" in act.columns else 0.0),
         "debug_unmapped_spend_7d": float(act["debug_unmapped_spend_7d"].max() if "debug_unmapped_spend_7d" in act.columns else 0.0),
         "debug_raw_spend_7d": float(act["debug_raw_spend_7d"].max() if "debug_raw_spend_7d" in act.columns else 0.0),
@@ -1613,7 +1648,7 @@ def _build_insights(
         if not healthy.empty:
             top = healthy.sort_values("Revenue", ascending=False).iloc[0]
             growth.append(
-                f"{top['Parent ASIN / SKU']} has efficient TACOS ({_format_percent(top['TACOS'])}) with strong CVR; increase coverage incrementally."
+                f"{top['SKU']} has efficient TACOS ({_format_percent(top['TACOS'])}) with strong CVR; increase coverage incrementally."
             )
         high_organic = product_table.sort_values("Revenue", ascending=False).head(1)
         if not high_organic.empty and organic_pct is not None and organic_pct >= 0.55:
@@ -1629,7 +1664,7 @@ def _build_insights(
         if not inefficient.empty:
             top_bad = inefficient.sort_values("TACOS", ascending=False).iloc[0]
             efficiency.append(
-                f"Rebalance spend from {top_bad['Parent ASIN / SKU']} (TACOS {_format_percent(top_bad['TACOS'])}) to lower-TACOS parents."
+                f"Rebalance spend from {top_bad['SKU']} (TACOS {_format_percent(top_bad['TACOS'])}) to lower-TACOS parents."
             )
         weak_cvr = product_table[product_table["CVR"] < max(0.02, product_table["CVR"].median() * 0.7)]
         if not weak_cvr.empty:
@@ -1932,7 +1967,7 @@ def render_business_overview() -> None:
 
     with st.container(border=True):
         st.markdown("**Trend: Sessions -> Orders -> Revenue**")
-        st.plotly_chart(_build_composed_figure(trend_df, currency), width='stretch')
+        st.plotly_chart(_build_composed_figure(trend_df, currency), use_container_width=True)
 
     # --- ROW 3 + 4 ---
     mix_col, ad_col = st.columns(2)
@@ -1944,7 +1979,7 @@ def render_business_overview() -> None:
                 render_metric_card("Organic %", _format_percent(organic_pct), _delta_text(calculate_delta_pct(organic_pct, None)))
             with top_mix[1]:
                 render_metric_card("Ad Sales %", _format_percent(ad_dependency), _delta_text(calculate_delta_pct(ad_dependency, None)))
-            st.plotly_chart(_build_paid_vs_organic_figure(trend_df, currency), width='stretch')
+            st.plotly_chart(_build_paid_vs_organic_figure(trend_df, currency), use_container_width=True)
 
     with ad_col:
         _section_header("Ad Impact", "Ads as a business lever (not campaign detail)")
@@ -1965,7 +2000,7 @@ def render_business_overview() -> None:
                 & (ad_spend_daily["report_date"].dt.date <= data["end_date"])
             ].copy() if not ad_spend_daily.empty else pd.DataFrame()
             tacos_series = build_tacos_daily_series(account_curr, curr_ad_daily)
-            st.plotly_chart(build_tacos_trend_figure(tacos_series, 0.15), width='stretch')
+            st.plotly_chart(build_tacos_trend_figure(tacos_series, 0.15), use_container_width=True)
             if tacos_series.empty:
                 st.caption("No valid TACOS points in selected window after excluding days with zero/null total sales.")
 
@@ -1974,7 +2009,8 @@ def render_business_overview() -> None:
         _section_header("Inventory Constraints", "Detect growth blockers before they impact scale")
         inv_cols = st.columns(4)
         with inv_cols[0]:
-            _constraint_card("Weighted Days of Cover", f"{inventory_summary['weighted_days_cover']:.0f} Days", "Across top 80% revenue drivers", "warning" if inventory_summary["weighted_days_cover"] < 45 else "healthy")
+            _top_n_label = int(inventory_summary.get("weighted_top_n", 75))
+            _constraint_card("Weighted Days of Cover", f"{inventory_summary['weighted_days_cover']:.0f} Days", f"Across top {_top_n_label} SKUs by revenue", "warning" if inventory_summary["weighted_days_cover"] < 45 else "healthy")
         with inv_cols[1]:
             _constraint_card("SKUs Below Safe Level", f"{int(inventory_summary['skus_below_safe'])} SKUs", "< 14 days of inventory left", "critical" if inventory_summary["skus_below_safe"] > 0 else "warning")
         with inv_cols[2]:

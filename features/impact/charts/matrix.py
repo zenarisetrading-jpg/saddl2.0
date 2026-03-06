@@ -180,7 +180,7 @@ def render_decision_outcome_matrix(impact_df: pd.DataFrame, summary: Dict[str, A
         annotations=annotations
     )
     
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, use_container_width=True)
     
     # How to read this chart
     st.markdown("""

@@ -278,7 +278,7 @@ def render_roas_waterfall(
     """, unsafe_allow_html=True)
 
     # Render chart
-    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
     # Summary metrics below chart
     ext_sign = "+" if wf['external_effect'] >= 0 else ""

@@ -994,46 +994,50 @@ class PostgresManager:
     
     def save_raw_search_term_data(self, df: pd.DataFrame, client_id: str, batch_size: int = 5000) -> int:
         """
-        Save raw daily search term data BEFORE weekly aggregation.
-        Preserves original granularity for re-aggregation and auditing.
-        
-        Flow: Upload → raw_search_term_data (daily) → reaggregate → target_stats (weekly)
-        
+        Save raw daily search term data from Amazon's daily-granularity STR export.
+
+        Expects reports exported with Time Unit = Daily. Each row represents a single
+        day — values are stored as-is with no proration.
+
         Args:
-            df: DataFrame with Date, Campaign Name, Ad Group Name, Targeting, 
-                Customer Search Term, Match Type, Impressions, Clicks, Spend, Sales, Orders
+            df: DataFrame from Amazon's daily STR export (one row per day per search term)
             client_id: Account identifier
             batch_size: Rows per batch insert (default 5000 for large uploads)
-        
+
         Returns:
             Number of rows saved
         """
         if df is None or df.empty:
             return 0
-        
-        # Determine date column
+
+        # Determine date column — daily exports use 'Date'
         date_col = None
         for col in ['Date', 'Start Date', 'Report Date', 'date', 'start_date', 'report_date']:
             if col in df.columns:
                 date_col = col
                 break
-        
+
         if date_col is None:
             print("WARNING: No date column found in raw data upload")
             return 0
-        
+
+        # Warn if End Date column present — indicates a non-daily (date-range) export
+        if any(c in df.columns for c in ['End Date', 'end_date']):
+            print("WARNING: 'End Date' column detected. Upload daily-granularity reports only "
+                  "(Time Unit = Daily in Campaign Manager). Data stored as-is using the Date column.")
+
         # Required columns
         camp_col = next((c for c in ['Campaign Name', 'campaign_name'] if c in df.columns), None)
-        ag_col = next((c for c in ['Ad Group Name', 'ad_group_name'] if c in df.columns), None)
-        
+        ag_col   = next((c for c in ['Ad Group Name', 'ad_group_name'] if c in df.columns), None)
+
         if not camp_col or not ag_col:
             print("WARNING: Missing Campaign Name or Ad Group Name columns")
             return 0
-        
+
         # Optional columns
         targeting_col = next((c for c in ['Targeting', 'targeting'] if c in df.columns), None)
-        cst_col = next((c for c in ['Customer Search Term', 'customer_search_term'] if c in df.columns), None)
-        mt_col = next((c for c in ['Match Type', 'match_type'] if c in df.columns), None)
+        cst_col       = next((c for c in ['Customer Search Term', 'customer_search_term'] if c in df.columns), None)
+        mt_col        = next((c for c in ['Match Type', 'match_type'] if c in df.columns), None)
 
         # Sales / orders — Amazon STR column names vary by marketplace currency symbol:
         #   UAE: '7 Day Total Sales '  (trailing space, no symbol)
@@ -1049,59 +1053,29 @@ class PostgresManager:
             next((c for c in ['Orders', 'orders'] if c in df.columns), None)
         )
 
-        # Detect End Date column for multi-day prorating
-        end_date_col = next((c for c in ['End Date', 'end_date'] if c in df.columns), None)
-
-        # Prepare records — prorate multi-day rows into one row per day
+        # Build records — one row per source row, stored as-is (no proration)
         records = []
         for _, row in df.iterrows():
-            # Parse start date
-            start_date = pd.to_datetime(row[date_col], errors='coerce')
-            if pd.isna(start_date):
+            report_date = pd.to_datetime(row[date_col], errors='coerce')
+            if pd.isna(report_date):
                 continue
 
-            # Parse end date if available
-            end_date = pd.to_datetime(row[end_date_col], errors='coerce') if end_date_col else pd.NaT
-            if pd.isna(end_date) or end_date < start_date:
-                end_date = start_date
+            camp = str(row[camp_col]).lower().strip() if pd.notna(row[camp_col]) else ''
+            ag   = str(row[ag_col]).lower().strip() if pd.notna(row[ag_col]) else ''
+            tgt  = str(row[targeting_col]).lower().strip() if targeting_col and pd.notna(row.get(targeting_col)) else None
+            cst  = str(row[cst_col]).lower().strip() if cst_col and pd.notna(row.get(cst_col)) else None
+            mt   = str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None
 
-            # Build list of dates this row covers
-            num_days = (end_date.date() - start_date.date()).days + 1
-            date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
-
-            # Prorated numeric values (divide evenly across days)
-            impressions_total = int(row.get('Impressions', 0) or 0)
-            clicks_total      = int(row.get('Clicks', 0) or 0)
-            spend_total       = float(row.get('Spend', 0) or 0)
-            sales_total       = float(row[sales_col] if sales_col and pd.notna(row.get(sales_col)) else 0) or 0
-            orders_total      = int(row[orders_col] if orders_col and pd.notna(row.get(orders_col)) else 0) or 0
-
-            camp  = str(row[camp_col]).lower().strip() if pd.notna(row[camp_col]) else ''
-            ag    = str(row[ag_col]).lower().strip() if pd.notna(row[ag_col]) else ''
-            tgt   = str(row[targeting_col]).lower().strip() if targeting_col and pd.notna(row.get(targeting_col)) else None
-            cst   = str(row[cst_col]).lower().strip() if cst_col and pd.notna(row.get(cst_col)) else None
-            mt    = str(row[mt_col]).lower().strip() if mt_col and pd.notna(row.get(mt_col)) else None
-
-            # Flow metrics (spend, impressions, clicks) prorate evenly across days.
-            # Outcome metrics (orders, sales/revenue) are NOT prorated — they are
-            # events tied to specific moments. We assign the full total to the
-            # START date and zero to every subsequent day in the range.
-            # This preserves totals without making false assumptions about when
-            # conversions occurred.
-            imp_base, imp_rem = divmod(impressions_total, num_days)
-            clk_base, clk_rem = divmod(clicks_total,      num_days)
-
-            for i, d in enumerate(date_range):
-                records.append((
-                    client_id,
-                    d.date().isoformat(),
-                    camp, ag, tgt, cst, mt,
-                    imp_base + (1 if i < imp_rem else 0),
-                    clk_base + (1 if i < clk_rem else 0),
-                    round(spend_total / num_days, 4),
-                    round(sales_total,  4) if i == 0 else 0.0,   # full amount on start date
-                    orders_total          if i == 0 else 0,       # full amount on start date
-                ))
+            records.append((
+                client_id,
+                report_date.date().isoformat(),
+                camp, ag, tgt, cst, mt,
+                int(row.get('Impressions', 0) or 0),
+                int(row.get('Clicks', 0) or 0),
+                float(row.get('Spend', 0) or 0),
+                float(row[sales_col]  if sales_col  and pd.notna(row.get(sales_col))  else 0) or 0,
+                int(row[orders_col]   if orders_col and pd.notna(row.get(orders_col)) else 0) or 0,
+            ))
         
         if not records:
             return 0

@@ -688,7 +688,7 @@ class ReportCardModule(BaseFeature):
             margin=dict(l=15, r=15, t=50, b=5)
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
         
         # Status below gauge with tooltip
         tooltip_html = f'<span title="{tooltip}" style="cursor: help; border-bottom: 1px dotted #64748b;">ⓘ</span>' if tooltip else ''
@@ -1145,7 +1145,7 @@ class ReportCardModule(BaseFeature):
             st.markdown("<div style='font-family: Inter, sans-serif; font-size: 17px; font-weight: 800; color: #F5F5F7; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px; text-align: center;'>Net Spend Reallocation</div>", unsafe_allow_html=True)
             st.markdown("<div style='color: #8F8CA3; font-size: 0.85rem; text-align: center; margin-bottom: 10px;'>Directional spend movement driven by optimization actions</div>", unsafe_allow_html=True)
             fig = self._create_reallocation_chart(realloc)
-            st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
         st.markdown("---")
         

@@ -112,7 +112,7 @@ def render_cumulative_impact_chart(impact_df: pd.DataFrame, currency: str):
         return
 
     fig = create_decision_timeline_figure(impact_df, currency)
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def render_revenue_counterfactual_chart(
@@ -191,4 +191,4 @@ def render_revenue_counterfactual_chart(
         )
     )
 
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, use_container_width=True)

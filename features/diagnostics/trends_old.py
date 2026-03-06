@@ -38,7 +38,7 @@ def _render_plotly_chart(df: pd.DataFrame, title: str, area: bool = False) -> No
         height=300,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
     )
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def _fetch_trends_frame(days: int = 60) -> pd.DataFrame:
@@ -134,7 +134,7 @@ def render_trends_page() -> None:
         _render_plotly_chart(rev_chart_df, "Revenue Breakdown", area=True)
     except Exception as exc:
         st.warning(f"Chart rendering fallback: {exc}")
-        st.dataframe(rev_chart_df, width='stretch')
+        st.dataframe(rev_chart_df, use_container_width=True)
 
     c1, c2 = st.columns(2)
     with c1:
@@ -144,7 +144,7 @@ def render_trends_page() -> None:
             _render_plotly_chart(tacos_df, "TACOS vs Organic Share")
         except Exception as exc:
             st.warning(f"Chart rendering fallback: {exc}")
-            st.dataframe(tacos_df, width='stretch')
+            st.dataframe(tacos_df, use_container_width=True)
     with c2:
         st.markdown("### CVR Comparison")
         if cvr_df.empty:
@@ -155,7 +155,7 @@ def render_trends_page() -> None:
                 _render_plotly_chart(cvr_plot_df, "CVR Comparison")
             except Exception as exc:
                 st.warning(f"Chart rendering fallback: {exc}")
-                st.dataframe(cvr_plot_df, width='stretch')
+                st.dataframe(cvr_plot_df, use_container_width=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 

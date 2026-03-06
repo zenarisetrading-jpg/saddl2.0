@@ -758,7 +758,7 @@ def render_landing_page():
         with col_btn:
             submitted = st.form_submit_button(
                 "Generate Analysis Report",
-                width='stretch',
+                use_container_width=True,
                 type="primary"
             )
         
@@ -879,13 +879,13 @@ def render_header(date_range: str, show_share: bool = False, share_context: dict
         if show_share and share_context:
             st.markdown('<div class="share-btn-wrapper">', unsafe_allow_html=True)
             if hasattr(st, "popover"):
-                with st.popover("🔗 Share Access", width='stretch'):
+                with st.popover("🔗 Share Access", use_container_width=True):
                     st.markdown("#### Generate Shareable Link")
                     st.caption("Creates a read-only public link valid for 30 days.")
-                    if st.button("Create Link", type="primary", width='stretch', key="create_link_btn"):
+                    if st.button("Create Link", type="primary", use_container_width=True, key="create_link_btn"):
                         _generate_and_show_link(share_context, date_range)
             else:
-                if st.button("🔗 Share Access", key="header_share_btn", width='stretch'):
+                if st.button("🔗 Share Access", key="header_share_btn", use_container_width=True):
                     st.session_state['show_share_result'] = True
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1031,7 +1031,7 @@ def _render_match_type_table_aligned(data: dict):
     currency = get_account_currency()
     st.dataframe(
         grouped,
-        width='stretch',
+        use_container_width=True,
         column_config={
             group_col: st.column_config.TextColumn("Match Type"),
             'Spend': st.column_config.NumberColumn(f"Spend", format=f"{currency} %.2f"),
@@ -1134,7 +1134,7 @@ def _render_spend_breakdown_aligned(data: dict):
         uniformtext=dict(mode='hide', minsize=10)
     )
 
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # =============================================================================
@@ -1158,7 +1158,7 @@ def run():
     # =========================================================================
     col_back, col_spacer = st.columns([0.2, 0.8])
     with col_back:
-        if st.button("← Configure Report", help="Return to configuration page", width='stretch'):
+        if st.button("← Configure Report", help="Return to configuration page", use_container_width=True):
             st.session_state['show_client_report'] = False
             st.rerun()
     

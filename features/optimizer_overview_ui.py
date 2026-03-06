@@ -209,7 +209,7 @@ def _render_efficiency_chart(summary: dict):
         yaxis=dict(showgrid=False, showticklabels=False)
     )
     
-    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
 def _render_top_opportunities(summary: dict):
     """Render the Top Opportunities table."""
@@ -245,6 +245,6 @@ def _render_top_opportunities(summary: dict):
             "Sales (14d)": st.column_config.TextColumn("Sales Vol"),
             "Est. Uplift": st.column_config.TextColumn("Proj. Uplift"),
         },
-        width='stretch',
+        use_container_width=True,
         hide_index=True
     )

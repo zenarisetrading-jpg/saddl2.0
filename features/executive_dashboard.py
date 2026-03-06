@@ -995,7 +995,7 @@ class ExecutiveDashboard:
             margin=dict(l=15, r=15, t=50, b=5)
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
         
         # Status below gauge with tooltip
         tooltip_html = f'<span title="{tooltip}" style="cursor: help; border-bottom: 1px dotted #64748b;">ⓘ</span>' if tooltip else ''
@@ -1139,7 +1139,7 @@ class ExecutiveDashboard:
             legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5)
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
     
 
 
@@ -1245,7 +1245,7 @@ class ExecutiveDashboard:
             zeroline=False
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
     def _render_spend_breakdown(self, data: Dict[str, Any]):
         """Render 'Where The Money Is' spend breakdown with Efficiency Ratio."""
@@ -1342,7 +1342,7 @@ class ExecutiveDashboard:
             uniformtext=dict(mode='hide', minsize=10)
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
         
         # Add legend/explanation for the ratio
         # Add legend/explanation for the ratio
@@ -1437,7 +1437,7 @@ class ExecutiveDashboard:
             )]
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
     def _render_match_type_table(self, data: Dict[str, Any]):
         """Render Match Type breakdown table (from Performance Overview)."""
@@ -1470,7 +1470,7 @@ class ExecutiveDashboard:
         currency = get_account_currency()
         st.dataframe(
             grouped,
-            width='stretch',
+            use_container_width=True,
             column_config={
                 group_col: st.column_config.TextColumn("Match Type"),
                 'Spend': st.column_config.NumberColumn(f"Spend", format=f"{currency} %.2f"),
@@ -1590,7 +1590,7 @@ class ExecutiveDashboard:
             )
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
     def _render_decision_timeline(self, data: Dict[str, Any]):
         """
@@ -1863,7 +1863,7 @@ class ExecutiveDashboard:
             )
         )
         
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
     def _render_decision_impact_card(self, data: Dict[str, Any]):
         """Render decision impact using CANONICAL metrics from ImpactMetrics."""

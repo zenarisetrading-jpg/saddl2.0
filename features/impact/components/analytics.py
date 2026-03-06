@@ -153,7 +153,7 @@ def _render_measurement_confidence(validation_df: pd.DataFrame):
         font={'family': "Inter, sans-serif"}
     )
     
-    st.plotly_chart(fig, width='stretch', config={'displayModeBar': False})
+    st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
     
     st.markdown(f"""
 <div style="text-align: center; margin-top: -30px; margin-bottom: 24px;"><div style="color: #94A3B8; font-size: 0.85rem; font-weight: 500;">Measurement Coverage</div></div>
