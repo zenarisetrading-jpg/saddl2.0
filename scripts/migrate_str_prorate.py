@@ -103,6 +103,24 @@ def main():
     saved = db.save_raw_search_term_data(df, args.client)
     print(f"Saved {saved} rows.")
 
+    # Rebuild target_stats from the clean raw data
+    # First delete existing target_stats rows for this client in the affected date range
+    conn2 = psycopg2.connect(db_url, connect_timeout=15)
+    cur2 = conn2.cursor()
+    cur2.execute("""
+        DELETE FROM target_stats
+        WHERE client_id = %s AND start_date BETWEEN %s AND %s
+    """, (args.client, min_date, max_date))
+    ts_deleted = cur2.rowcount
+    conn2.commit()
+    cur2.close()
+    conn2.close()
+    print(f"Cleared {ts_deleted} stale rows from target_stats.")
+
+    print("Reaggregating target_stats from clean raw data...")
+    agg_count = db.reaggregate_target_stats(args.client)
+    print(f"Reaggregated {agg_count} rows into target_stats.")
+
     # Verify totals match
     conn = psycopg2.connect(db_url, connect_timeout=15)
     cur = conn.cursor()
