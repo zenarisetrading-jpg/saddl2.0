@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from .components import render_metric_card
-from .charts import render_spend_reallocation_chart, render_action_distribution_chart
+
 from utils.formatters import get_account_currency, format_currency, dataframe_to_excel
 from features.optimizer_shared.ui.campaign_panel import render_tier1_campaign_panel
 
@@ -925,21 +925,6 @@ def render_results_dashboard(results: dict):
         {"label": "Negatives", "value": f"{neg_count:,}", "subtext": f"{currency}{neg_spend_saving:,.0f} Waste Blocked", "accent": "#60a5fa"},
         {"label": "Harvest", "value": f"{harv_count:,}", "subtext": f"{currency}{harvest_value:,.0f} Sales Vol", "accent": "#38bdf8"},
     ])
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # 6. Visual Impact Analysis (Header Removed)
-    vc1, vc2 = st.columns([1.5, 1])
-
-    # Calculate total spend reference
-    total_spend_ref = 500000  # Default/Fallback
-    if "df" in results and isinstance(results["df"], pd.DataFrame) and "Spend" in results["df"].columns:
-        total_spend_ref = results["df"]["Spend"].sum()
-
-    with vc1:
-        render_spend_reallocation_chart(total_spend_ref, neg_spend_saving, bid_saving, reallocated, currency)
-    with vc2:
-        render_action_distribution_chart(action_count, bid_count, neg_count, harv_count)
 
     _render_intelligence_layer_hero(all_bids)
 
