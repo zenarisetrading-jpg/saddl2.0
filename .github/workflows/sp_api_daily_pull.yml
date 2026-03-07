@@ -1,0 +1,59 @@
+name: SP-API Daily Pull — All Accounts
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 03:00 UTC daily (covers all timezones before business day)
+  workflow_dispatch:        # Manual trigger from GitHub Actions UI
+
+jobs:
+  daily-pull:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180     # Safety cap — 3 accounts x 45 min max wait + processing = ~145 mins. 180 is safe.
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run daily pull for ALL active accounts
+        env:
+          # ── Core infrastructure (required) ────────────────────────────────
+          DATABASE_URL:            ${{ secrets.DATABASE_URL }}
+
+          # ── SP-API app credentials (one LWA app serves all seller accounts) ─
+          # Each seller's refresh_token is stored per-account in client_settings.
+          # No per-account secrets needed — new accounts are picked up automatically.
+          LWA_CLIENT_ID:           ${{ secrets.LWA_CLIENT_ID }}
+          LWA_CLIENT_SECRET:       ${{ secrets.LWA_CLIENT_SECRET }}
+
+          # ── AWS (for BSR — optional, BSR step is best-effort) ─────────────
+          AWS_ACCESS_KEY_ID:       ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY:   ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION:              ${{ secrets.AWS_REGION }}
+
+          # ── Supabase (if used for storage/auth) ───────────────────────────
+          SUPABASE_URL:            ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY:    ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+        run: |
+          export PYTHONPATH=.
+          python3 scripts/run_pipeline_all_accounts.py
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-failure-logs-${{ github.run_id }}
+          path: logs/
+          if-no-files-found: ignore
+          retention-days: 7
