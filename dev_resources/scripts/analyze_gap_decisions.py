@@ -94,7 +94,7 @@ def main():
             breakdown = gap_df.groupby('click_bin', observed=True)['decision_impact'].agg(['count', 'sum', 'mean']).reset_index()
             breakdown.columns = ['Click Range', 'Count', 'Total Impact', 'Avg Impact']
 
-            st.dataframe(breakdown, width='stretch')
+            st.dataframe(breakdown, use_container_width=True)
 
             # Identify outliers
             st.subheader("Outlier Detection")
@@ -121,7 +121,7 @@ def main():
 
                 st.dataframe(
                     outliers_1k[outlier_cols].sort_values('decision_impact', key=abs, ascending=False),
-                    width='stretch'
+                    use_container_width=True
                 )
 
                 # Calculate impact of removing outliers
@@ -160,7 +160,7 @@ def main():
             st.subheader("All Gap Decisions")
             st.dataframe(
                 gap_df[export_cols].sort_values('decision_impact', key=abs, ascending=False),
-                width='stretch',
+                use_container_width=True,
                 height=400
             )
 

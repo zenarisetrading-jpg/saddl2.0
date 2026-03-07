@@ -69,7 +69,7 @@ def render_downloads_tab(results: Dict, group_issues_fn=None) -> None:
                         st.warning(f"**[{rule}]** {msg}")
         
         with st.expander("👁️ Preview File Content", expanded=False):
-            st.dataframe(kw_bulk, width='stretch', height=300)
+            st.dataframe(kw_bulk, use_container_width=True, height=300)
         
         buf = dataframe_to_excel(kw_bulk)
         st.download_button(
@@ -79,7 +79,7 @@ def render_downloads_tab(results: Dict, group_issues_fn=None) -> None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="dl_neg_btn",
             type="primary",
-            width='stretch',
+            use_container_width=True,
             disabled=(total_rows == 0)
         )
         st.markdown("<br>", unsafe_allow_html=True)
@@ -112,7 +112,7 @@ def render_downloads_tab(results: Dict, group_issues_fn=None) -> None:
                         st.warning(f"**[{rule}]** {msg}")
         
         with st.expander("👁️ Preview File Content", expanded=False):
-            st.dataframe(bid_bulk, width='stretch', height=300)
+            st.dataframe(bid_bulk, use_container_width=True, height=300)
         
         buf = dataframe_to_excel(bid_bulk)
         st.download_button(
@@ -122,7 +122,7 @@ def render_downloads_tab(results: Dict, group_issues_fn=None) -> None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="dl_bid_btn",
             type="primary",
-            width='stretch',
+            use_container_width=True,
             disabled=(total_rows == 0)
         )
         st.markdown("<br>", unsafe_allow_html=True)
@@ -133,7 +133,7 @@ def render_downloads_tab(results: Dict, group_issues_fn=None) -> None:
         leaf_icon_sub = f'<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="{icon_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 8px;"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8a8 8 0 0 1-8 8Z"></path><path d="M11 20c0-2.5 2-5.5 2-5.5"></path></svg>'
         st.markdown(f"<div style='color: #F5F5F7; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center;'>{leaf_icon_sub}Harvest Candidates</div>", unsafe_allow_html=True)
         with st.expander("👁️ Preview Candidate List", expanded=False):
-            st.dataframe(harvest.head(5), width='stretch')
+            st.dataframe(harvest.head(5), use_container_width=True)
         
         buf = dataframe_to_excel(harvest)
         st.download_button(
@@ -143,5 +143,5 @@ def render_downloads_tab(results: Dict, group_issues_fn=None) -> None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="dl_harvest_btn",
             type="primary",
-            width='stretch'
+            use_container_width=True
         )

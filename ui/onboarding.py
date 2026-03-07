@@ -80,7 +80,7 @@ def render_connect_amazon_account_button(
             label,
             auth_url,
             type="primary",
-            width='stretch',
+            use_container_width=True,
         )
     except EnvironmentError:
         # Deployment-safe fallback when OAuth env vars are missing.
@@ -88,7 +88,7 @@ def render_connect_amazon_account_button(
             f"{label} (Unavailable)",
             key=key,
             type="primary",
-            width='stretch',
+            use_container_width=True,
             disabled=True,
         )
         st.caption("SP-API OAuth is not configured in this environment. Set `SP_API_APPLICATION_ID` to enable this button.")
@@ -275,12 +275,12 @@ def _render_step_1_welcome():
         bcol1, bcol2 = st.columns(2)
 
         with bcol1:
-            if st.button("Skip for now", type="secondary", width='stretch', key="skip_1"):
+            if st.button("Skip for now", type="secondary", use_container_width=True, key="skip_1"):
                 dismiss_onboarding()
                 st.rerun()
 
         with bcol2:
-            if st.button("Get Started →", type="primary", width='stretch', key="next_1"):
+            if st.button("Get Started →", type="primary", use_container_width=True, key="next_1"):
                 st.session_state['onboarding_step'] = 2
                 st.rerun()
 
@@ -367,17 +367,17 @@ def _render_step_2_features():
         bcol1, bcol2, bcol3 = st.columns(3)
 
         with bcol1:
-            if st.button("← Back", type="secondary", width='stretch', key="back_2"):
+            if st.button("← Back", type="secondary", use_container_width=True, key="back_2"):
                 st.session_state['onboarding_step'] = 1
                 st.rerun()
 
         with bcol2:
-            if st.button("Skip", type="secondary", width='stretch', key="skip_2"):
+            if st.button("Skip", type="secondary", use_container_width=True, key="skip_2"):
                 dismiss_onboarding()
                 st.rerun()
 
         with bcol3:
-            if st.button("Continue →", type="primary", width='stretch', key="next_2"):
+            if st.button("Continue →", type="primary", use_container_width=True, key="next_2"):
                 st.session_state['onboarding_step'] = 3
                 st.rerun()
 
@@ -536,12 +536,12 @@ def _render_step_3_next_steps():
         bcol1, bcol2 = st.columns(2)
 
         with bcol1:
-            if st.button("← Back", type="secondary", width='stretch', key="back_3"):
+            if st.button("← Back", type="secondary", use_container_width=True, key="back_3"):
                 st.session_state['onboarding_step'] = 2
                 st.rerun()
 
         with bcol2:
-            if st.button("Go to Dashboard →", type="primary", width='stretch', key="finish"):
+            if st.button("Go to Dashboard →", type="primary", use_container_width=True, key="finish"):
                 dismiss_onboarding()
                 st.rerun()
 

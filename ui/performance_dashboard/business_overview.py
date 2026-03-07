@@ -2018,29 +2018,6 @@ def render_business_overview() -> None:
         with inv_cols[3]:
             _constraint_card("Ad Spend on Low Stock", f"{_format_currency(inventory_summary['ad_spend_low_stock_week'], currency)}/wk", "Burning spend on constrained inventory", "warning" if inventory_summary["ad_spend_low_stock_week"] > 0 else "healthy")
         st.caption(f"{int(inventory_summary.get('inactive_excluded', 0))} inactive/discontinued SKUs excluded")
-        with st.expander("Inventory calculation audit", expanded=False):
-            st.markdown("**Corrected formula**")
-            st.code(
-                inventory_summary.get(
-                    "audit_formula",
-                    "ad_spend_low_stock_week = SUM(ad_spend_7d) for ASINs with Stock Days < 14 after activity filter",
-                ),
-                language="text",
-            )
-            st.markdown("**Corrected query (ASIN linkage via advertised_product_cache)**")
-            st.code(inventory_audit_query.strip() if inventory_audit_query else "-- query unavailable", language="sql")
-            st.markdown(
-                f"**Actual value after fix:** `{_format_currency(inventory_summary['ad_spend_low_stock_week'], currency)}/wk`"
-            )
-            st.markdown(
-                f"**Debug:** low-stock ASINs found = `{int(inventory_summary.get('low_stock_asin_count', 0))}`, "
-                f"7-day mapped spend total = `{_format_currency(inventory_summary['ad_spend_low_stock_week'], currency)}`"
-            )
-            st.markdown(
-                f"**Mapping diagnostics (7d):** raw spend = `{_format_currency(inventory_summary.get('debug_raw_spend_7d', 0.0), currency)}`, "
-                f"mapped spend = `{_format_currency(inventory_summary.get('debug_mapped_spend_7d', 0.0), currency)}`, "
-                f"unmapped spend = `{_format_currency(inventory_summary.get('debug_unmapped_spend_7d', 0.0), currency)}`"
-            )
     else:
         st.info("SP-API not connected - inventory signals unavailable")
 

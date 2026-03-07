@@ -76,7 +76,7 @@ def _render_no_account_state():
     # Render buttons outside HTML to keep Streamlit functionality
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        if st.button("Connect Account", type="primary", width='stretch'):
+        if st.button("Connect Account", type="primary", use_container_width=True):
             st.session_state['show_account_form'] = True
             st.rerun()
 
@@ -135,7 +135,7 @@ def _render_no_data_state(account_name):
     
     c1, c2, c3 = st.columns([1, 1, 1])
     with c2:
-        if st.button("↻ Check for Data", type="primary", width='stretch'):
+        if st.button("↻ Check for Data", type="primary", use_container_width=True):
             st.rerun()
 
 def _render_filtered_empty_state():
@@ -178,7 +178,7 @@ def _render_filtered_empty_state():
     
     c1, c2, c3 = st.columns([1.5, 1, 1.5])
     with c2:
-        if st.button("Clear Filters", type="secondary", width='stretch'):
+        if st.button("Clear Filters", type="secondary", use_container_width=True):
             # Reset common filter keys
             keys_to_reset = ['impact_horizon', 'validated_only_toggle']
             for k in keys_to_reset:

@@ -156,7 +156,7 @@ class ASINMapperModule(BaseFeature):
             else:
                 results = None
             
-        if st.button("🚀 Analyze Search Terms for ASIN Intent", type="primary", width='stretch'):
+        if st.button("🚀 Analyze Search Terms for ASIN Intent", type="primary", use_container_width=True):
             with st.spinner("Classifying ASINs..."):
                 results = self.analyze(self.data)
                 st.session_state['latest_asin_analysis'] = results
@@ -295,7 +295,7 @@ class ASINMapperModule(BaseFeature):
             st.info("No high-priority non-converting ASINs found based on current thresholds.")
             return
         
-        st.dataframe(high_priority[['asin', 'impressions', 'clicks', 'spend']], width='stretch')
+        st.dataframe(high_priority[['asin', 'impressions', 'clicks', 'spend']], use_container_width=True)
         
         # 3. API Lookup Logic (The Action)
         # Check if we already have API results (persisted in results dict)
@@ -307,7 +307,7 @@ class ASINMapperModule(BaseFeature):
             # ACTUAL REPLACEMENT LOGIC
             # I will insert the Clear Cache button right before the Lookup button check
             
-            if st.button("🗑️ Force Refresh / Clear Cache", key="clear_cache_btn", type="secondary", width='stretch'):
+            if st.button("🗑️ Force Refresh / Clear Cache", key="clear_cache_btn", type="secondary", use_container_width=True):
                 try:
                     import os, time
                     if os.path.exists("data/asin_cache.db"):
@@ -319,7 +319,7 @@ class ASINMapperModule(BaseFeature):
                 except Exception as e:
                     st.error(f"Could not clear cache: {e}")
 
-            if st.button(f"🚀 Enrich {len(high_priority)} ASINs via Rainforest API", key="asin_lookup_trigger_v2", type="primary", width='stretch'):
+            if st.button(f"🚀 Enrich {len(high_priority)} ASINs via Rainforest API", key="asin_lookup_trigger_v2", type="primary", use_container_width=True):
                 
                 # Fresh secrets read (bypass cached config)
                 api_key = None
@@ -413,7 +413,7 @@ class ASINMapperModule(BaseFeature):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="asin_download_btn",
             type="primary",
-            width='stretch'
+            use_container_width=True
         )
         st.markdown("<br>", unsafe_allow_html=True)
         
@@ -451,7 +451,7 @@ class ASINMapperModule(BaseFeature):
             flagged_display = flagged_display[['asin', 'brand', 'title', 'original_clicks', 'original_spend']].copy()
             flagged_display.columns = ['ASIN', 'Brand', 'Product', 'Clicks', 'Wasted Spend']
             flagged_display = flagged_display.fillna('N/A')
-            st.dataframe(flagged_display, width='stretch')
+            st.dataframe(flagged_display, use_container_width=True)
 
         # 2. Your Non-Converting Products (Diagnostics)
         if not your_products.empty:
@@ -477,9 +477,9 @@ class ASINMapperModule(BaseFeature):
             if 'brand' in competitors.columns:
                 comp_summary = competitors.groupby('brand').agg({'asin': 'count', 'original_spend': 'sum'}).sort_values('original_spend', ascending=False)
                 comp_summary.columns = ['Count', 'Total Wasted Spend']
-                st.dataframe(comp_summary, width='stretch')
+                st.dataframe(comp_summary, use_container_width=True)
             else:
-                st.dataframe(competitors, width='stretch')
+                st.dataframe(competitors, use_container_width=True)
 
     def _render_diagnostic_card(self, product):
         """Render diagnostic details for a single product."""

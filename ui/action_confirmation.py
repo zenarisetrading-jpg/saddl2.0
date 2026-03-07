@@ -47,7 +47,7 @@ def show_confirmation_dialog():
     btn_col1, btn_col2, btn_col3 = st.columns(3)
     
     with btn_col1:
-        if st.button("🗑️ Discard", width='stretch', type="secondary"):
+        if st.button("🗑️ Discard", use_container_width=True, type="secondary"):
             # Clear pending actions without saving
             st.session_state['pending_actions'] = None
             st.session_state['_show_action_confirmation'] = False
@@ -57,12 +57,12 @@ def show_confirmation_dialog():
             st.rerun()
     
     with btn_col2:
-        if st.button("💾 Save to History", width='stretch', type="primary"):
+        if st.button("💾 Save to History", use_container_width=True, type="primary"):
             # Save actions to database
             _save_pending_actions_and_navigate(target)
     
     with btn_col3:
-        if st.button("← Back", width='stretch'):
+        if st.button("← Back", use_container_width=True):
             st.session_state['_show_action_confirmation'] = False
             st.session_state['_pending_navigation_target'] = None
             st.rerun()

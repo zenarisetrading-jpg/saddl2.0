@@ -21,7 +21,7 @@ def render_platform_admin():
     # --- Actions Bar ---
     col1, col2 = st.columns([1, 4])
     with col1:
-        if st.button("➕ Add Client", type="primary", width='stretch'):
+        if st.button("➕ Add Client", type="primary", use_container_width=True):
             add_client_dialog()
             
     # --- PROVISIONAL: Data Migration Tool (For User Request) ---
@@ -87,7 +87,7 @@ def render_platform_admin():
             "Created": st.column_config.TextColumn("Created", width="small"),
             "ID": st.column_config.TextColumn("ID", width="large", disabled=True),
         },
-        width='stretch',
+        use_container_width=True,
         hide_index=True
     )
 

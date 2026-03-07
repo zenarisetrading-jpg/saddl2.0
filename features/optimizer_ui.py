@@ -184,6 +184,6 @@ def render_optimizer_control_panel(df, min_date, max_date, currency_symbol="$"):
         st.markdown('<div style="height: 20px;"></div>', unsafe_allow_html=True)
         
         # Run Button
-        run_clicked = st.button("🚀 Run Analysis & Optimize", type="primary", width='stretch')
+        run_clicked = st.button("🚀 Run Analysis & Optimize", type="primary", use_container_width=True)
         
     return {"run": run_clicked, "mode": mode, "start_date": start_date, "end_date": end_date}

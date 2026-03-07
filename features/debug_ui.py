@@ -99,7 +99,7 @@ def render_debug_metrics():
                                 'First': row[2],
                                 'Last': row[3]
                             })
-                    st.dataframe(pd.DataFrame(types_data), width='stretch', hide_index=True)
+                    st.dataframe(pd.DataFrame(types_data), use_container_width=True, hide_index=True)
 
             st.markdown("---")
 
