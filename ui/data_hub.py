@@ -548,12 +548,22 @@ def render_data_hub():
                         
                         confirm_move = st.checkbox(f"✅ Confirm move to {to_name}", key="final_reassign_confirm")
                         if confirm_move and st.button("Execute Move", type="primary", key="execute_reassign"):
-                            success = db.reassign_data(from_id, to_id, str(start_date), str(end_date))
-                            if success:
-                                st.success(f"✅ Moved!")
-                                del st.session_state['reassign_preview_active']
-                            else:
-                                st.error("❌ Failed")
+                            # CHECK 1 — same account guard
+                            if from_id == to_id:
+                                st.error('Source and destination accounts are the same — reassignment cancelled.')
+                                return
+                            # CHECK 2 — verify source has data (full history, not just the date range)
+                            count_all = db.execute_scalar("SELECT COUNT(*) FROM target_stats WHERE client_id = %s", (from_id,))
+                            if not count_all or count_all == 0:
+                                st.warning(f'No data found for source account {from_id} — reassignment cancelled.')
+                                return
+                            # Proceed with the reassignment UPDATE (unchanged)
+                            affected_rows = db.reassign_data(from_id, to_id, str(start_date), str(end_date))
+                            # CHECK 3 — report row count after UPDATE
+                            st.success(f'Reassigned {affected_rows} rows from {from_id} to {to_id}.')
+                            if affected_rows == 0:
+                                st.warning('UPDATE completed but 0 rows were affected — verify account IDs.')
+                            del st.session_state['reassign_preview_active']
                     else:
                         st.warning("No data found in range")
                 except Exception as e:

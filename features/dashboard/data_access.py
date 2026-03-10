@@ -30,12 +30,12 @@ def check_spapi_available(client_id: str) -> bool:
     # SQLite fallback path for local/test environments:
     # rely on client_settings connection fields if present.
     placeholder = getattr(db, "placeholder", "?")
-    query = f"""
-        SELECT lwa_refresh_token, onboarding_status
-        FROM client_settings
-        WHERE client_id = {placeholder}
-        LIMIT 1
-    """
+    query = (
+        "SELECT lwa_refresh_token, onboarding_status"
+        " FROM client_settings"
+        " WHERE client_id = " + placeholder +
+        " LIMIT 1"
+    )
     try:
         with db._get_connection() as conn:
             cursor = conn.cursor()

@@ -10,7 +10,11 @@ from app_core.db_manager import get_db_manager
 
 def render_debug_metrics():
     """Render the debug diagnostics UI."""
-    
+    import os
+    if os.environ.get('SADDL_ENV', '').lower() == 'production':
+        st.error('Debug UI is disabled in production environments.')
+        st.stop()
+
     st.subheader("🔍 Impact Dashboard Diagnostics")
     st.caption("Debug tool to identify why impact results aren't showing")
 
@@ -20,6 +24,11 @@ def render_debug_metrics():
     # Try to pre-fill from session state if available
     default_client = st.session_state.get('active_account_id', 'digiaansh_test')
     client_id = st.text_input("Client ID to diagnose", value=default_client)
+
+    allowed_ids = [a['id'] for a in st.session_state.get('user_accounts', [])]
+    if client_id and client_id not in allowed_ids:
+        st.error('Access denied — you can only view accounts assigned to your organization.')
+        st.stop()
 
     if st.button("Run Diagnostics", type="primary"):
         with st.spinner("Running diagnostics..."):

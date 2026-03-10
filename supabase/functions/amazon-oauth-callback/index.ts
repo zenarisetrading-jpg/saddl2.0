@@ -121,6 +121,23 @@ serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
   );
 
+  // Verify the state param corresponds to a known client before writing tokens.
+  const { data: existingClient, error: lookupError } = await supabase
+    .from("client_settings")
+    .select("id")
+    .eq("id", state)
+    .maybeSingle();
+
+  if (lookupError) {
+    console.error("OAuth callback: state param lookup failed:", lookupError);
+    return new Response("Internal server error", { status: 500 });
+  }
+
+  if (!existingClient) {
+    console.error("OAuth callback: unknown state param", state);
+    return new Response("Invalid OAuth state", { status: 400 });
+  }
+
   const { error: dbError } = await supabase
     .from("client_settings")
     .upsert({
