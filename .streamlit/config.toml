@@ -17,10 +17,5 @@ font = "sans serif"
 showSidebarNavigation = true
 toolbarMode = "minimal"
 
-[ui]
-# Hide top-right menu and footer
-hideTopBar = true
-hideSidebarNav = false
-
 [server]
 fileWatcherType = "none"

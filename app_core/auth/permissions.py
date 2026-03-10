@@ -71,6 +71,7 @@ ROLE_HIERARCHY_STR = {
 
 PERMISSION_MATRIX = {
     # Owner-only
+    "platform_admin": [Role.OWNER],
     "manage_billing": [Role.OWNER],
     "delete_organization": [Role.OWNER],
     "transfer_ownership": [Role.OWNER],

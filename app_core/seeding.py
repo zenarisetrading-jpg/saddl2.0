@@ -10,17 +10,16 @@ import uuid
 from app_core.auth.service import AuthService
 from app_core.auth.models import Role
 
-DEFAULT_ADMIN_EMAIL = os.environ.get('SADDL_BOOTSTRAP_EMAIL')
-DEFAULT_ADMIN_PASSWORD = os.environ.get('SADDL_BOOTSTRAP_PASSWORD')
-
-if not DEFAULT_ADMIN_EMAIL or not DEFAULT_ADMIN_PASSWORD:
-    raise RuntimeError('SADDL_BOOTSTRAP_EMAIL and SADDL_BOOTSTRAP_PASSWORD must be set before first run')
-
 def seed_initial_data():
     """
     Check if users exist. If not, create default admin.
     Optimized to use a single connection and exit early if already seeded.
     """
+    email = os.environ.get('SADDL_BOOTSTRAP_EMAIL')
+    password = os.environ.get('SADDL_BOOTSTRAP_PASSWORD')
+    if not email or not password:
+        raise RuntimeError('SADDL_BOOTSTRAP_EMAIL and SADDL_BOOTSTRAP_PASSWORD must be set before first run')
+
     print("SEED: Initializing...")
 
     try:
@@ -42,8 +41,8 @@ def seed_initial_data():
             ph = auth_service.db_manager.placeholder
 
             # 1. Quick check if admin exists (early exit for most startups)
-            print(f"SEED: Checking if admin exists ({DEFAULT_ADMIN_EMAIL})...")
-            cur.execute(f"SELECT id FROM users WHERE email = {ph}", (DEFAULT_ADMIN_EMAIL,))
+            print(f"SEED: Checking if admin exists ({email})...")
+            cur.execute(f"SELECT id FROM users WHERE email = {ph}", (email,))
             if cur.fetchone():
                 print("SEED: Admin exists, skipping.")
                 return "SEED: Admin exists, skipping."
@@ -70,14 +69,14 @@ def seed_initial_data():
     print("SEED: Creating default admin...")
     try:
         success = auth_service.create_user_manual(
-            email=DEFAULT_ADMIN_EMAIL,
-            password=DEFAULT_ADMIN_PASSWORD,
+            email=email,
+            password=password,
             role=Role.ADMIN,
             org_id=default_org_id
         )
 
         if success:
-            msg = f"SEED: Created admin: {DEFAULT_ADMIN_EMAIL}"
+            msg = f"SEED: Created admin: {email}"
             print(msg)
             return msg
         else:
