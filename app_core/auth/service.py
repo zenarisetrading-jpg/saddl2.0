@@ -78,12 +78,13 @@ class AuthService:
             finally:
                 conn.close()
 
-    def sign_in(self, email: str, password: str) -> Dict[str, Any]:
+    def sign_in(self, email: str, password: str, org_id=None) -> Dict[str, Any]:
         """
         Authenticate user by email and password.
         Sets session state on success.
         Returns: {success: bool, user: User, error: str}
         """
+        _expected_org_id = org_id  # capture before tuple-unpack shadows the name
         if not email or not password:
              return {"success": False, "error": "Email and password required"}
              
@@ -119,7 +120,12 @@ class AuthService:
                     print("LOGIN DEBUG: Password verification failed.")
                     return {"success": False, "error": "Invalid password"}
                 
-                print("LOGIN DEBUG: Password verified successfully.")                    
+                print("LOGIN DEBUG: Password verified successfully.")
+
+                # SEC-5: Org scoping — reject if caller supplied an org_id that doesn't match the DB row
+                if _expected_org_id and str(org_id) != str(_expected_org_id):
+                    return {'success': False, 'error': 'Account not found in this organization'}
+
                 # Construct User Model
                 # Load Overrides first
                 account_overrides = {}
@@ -156,8 +162,11 @@ class AuthService:
                 )
                 
                 # SESSION STORAGE (Canonical)
+                import secrets as _secrets
+                session_token = _secrets.token_urlsafe(32)
+                st.session_state['session_token'] = session_token
                 st.session_state["user"] = user
-                
+
                 return {"success": True, "user": user}
             
         except Exception as e:
@@ -174,10 +183,16 @@ class AuthService:
             return user
         return None
 
+    def validate_session(self) -> bool:
+        """Return True only when both a user object and a session token are present."""
+        return st.session_state.get('user') is not None and st.session_state.get('session_token') is not None
+
     def sign_out(self):
         """Clear user session."""
         if "user" in st.session_state:
             del st.session_state["user"]
+        if "session_token" in st.session_state:
+            del st.session_state["session_token"]
 
     def create_user_manual(self, email: str, password: str, role: Role, org_id: str) -> bool:
         """
@@ -426,12 +441,13 @@ class AuthService:
         if admin_user.role == Role.ADMIN:
             pass 
             
-        temp_password = "PPC-" + os.urandom(4).hex() + "!" 
-        
+        import secrets as _secrets
+        temp_password = _secrets.token_urlsafe(12) + 'Aa1!'
+
         try:
             with self._get_connection() as conn:
                 cur = conn.cursor()
-                
+
                 # 1. Fetch Target Role (for protection)
                 cur.execute("SELECT role FROM users WHERE id = %s", (str(target_user_id),))
                 row = cur.fetchone()
@@ -478,7 +494,8 @@ class AuthService:
                 exists = cur.fetchone() is not None
             
             if exists:
-                temp_password = "PPC-" + os.urandom(4).hex() + "!"
+                import secrets as _secrets
+                temp_password = _secrets.token_urlsafe(12) + 'Aa1!'
                 new_hash = hash_password(temp_password)
                 
                 # Update DB

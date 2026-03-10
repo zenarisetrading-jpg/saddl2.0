@@ -127,8 +127,12 @@ def add_client_dialog():
                 creator_id = str(st.session_state.current_user.id) if 'current_user' in st.session_state else None
                 
                 with st.spinner("Creating organization..."):
-                    result = svc.create_organization(org_name, admin_email, creator_user_id=creator_id)
-                
+                    try:
+                        result = svc.create_organization(org_name, admin_email, creator_user_id=creator_id)
+                    except ValueError as e:
+                        st.error(f'Invitation failed: {str(e)}')
+                        return
+
                 if result.success:
                     st.success("Organization created successfully!")
                     st.balloons()

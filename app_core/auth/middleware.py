@@ -66,6 +66,7 @@ def require_permission(permission: str) -> Callable:
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
+            """Checks that the current user has the required permission before executing the decorated function."""
             # 1. Resolve User/Role
             user = kwargs.get('user')
             if not user and args:
@@ -93,4 +94,4 @@ def require_permission(permission: str) -> Callable:
                 
             return func(*args, **kwargs)
         return wrapper
-    return decorator # Note: logic bug here in original thought (nested wrapper), fixing below.
+    return decorator

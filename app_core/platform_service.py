@@ -163,10 +163,12 @@ class PlatformService:
                 pass
         
         # Invite as OWNER
+        if not inviter_id:
+            raise ValueError('invited_by_user_id is required — cannot create invitation without a valid creator user ID')
         invite_result = self.invitation_service.create_invitation(
             email=admin_email,
             organization_id=org_id,
-            invited_by_user_id=inviter_id if inviter_id else str(uuid.uuid4()), # Fallback UUID if absolutely necessary to pass non-null constraint, though ideally we have a real user
+            invited_by_user_id=inviter_id,
             role="OWNER",
             inviter_name="SADDL Admin",
             inviter_org_name="SADDL AdPulse"

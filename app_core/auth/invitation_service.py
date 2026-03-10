@@ -41,6 +41,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, NamedTuple
 from dataclasses import dataclass
 from enum import Enum
+from app_core.auth.hashing import hash_password, verify_password
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -335,6 +336,7 @@ class InvitationService:
 
                 # Create new invitation
                 token = self._generate_token()
+                token_hash = hash_password(token)
                 expires_at = self._get_expiry_date()
 
                 cur.execute("""
@@ -344,7 +346,7 @@ class InvitationService:
                     )
                     VALUES (%s, %s, %s, %s, %s, 'pending', %s)
                     RETURNING id, created_at
-                """, (email, token, organization_id, invited_by_user_id, role, expires_at))
+                """, (email, token_hash, organization_id, invited_by_user_id, role, expires_at))
 
                 result = cur.fetchone()
                 inv_id, created_at = result
@@ -409,14 +411,22 @@ class InvitationService:
             with self._get_connection() as conn:
                 cur = conn.cursor()
 
+                # Fetch all pending, non-expired invitations and bcrypt-verify in Python
+                # (bcrypt hashes cannot be matched in SQL; invitation volume is low)
                 cur.execute("""
                     SELECT id, email, token, organization_id, invited_by_user_id,
                            role, status, expires_at, created_at, accepted_at, created_user_id
                     FROM user_invitations
-                    WHERE token = %s
-                """, (token,))
+                    WHERE status = 'pending'
+                """)
 
-                row = cur.fetchone()
+                rows = cur.fetchall()
+                row = None
+                for candidate in rows:
+                    stored_hash = candidate[2]
+                    if verify_password(token, stored_hash):
+                        row = candidate
+                        break
 
                 if not row:
                     logger.warning(f"Token not found: {token[:8]}...")
@@ -435,11 +445,6 @@ class InvitationService:
                     accepted_at=row[9],
                     created_user_id=str(row[10]) if row[10] else None
                 )
-
-                # Check if already used
-                if invitation.status != InvitationStatus.PENDING.value:
-                    logger.info(f"Token already {invitation.status}: {token[:8]}...")
-                    return None
 
                 # Check expiration
                 if invitation.is_expired:
@@ -475,15 +480,38 @@ class InvitationService:
             with self._get_connection() as conn:
                 cur = conn.cursor()
 
+                # Fetch pending invitations and bcrypt-verify token in Python
+                cur.execute("""
+                    SELECT id, email, token
+                    FROM user_invitations
+                    WHERE status = 'pending'
+                """)
+                rows = cur.fetchall()
+                matched = None
+                for candidate in rows:
+                    stored_hash = candidate[2]
+                    if verify_password(token, stored_hash):
+                        matched = candidate
+                        break
+
+                if not matched:
+                    return InvitationResult(
+                        success=False,
+                        message="Invitation not found or already accepted",
+                        error_code="NOT_FOUND"
+                    )
+
+                inv_id, email, _ = matched
+
                 cur.execute("""
                     UPDATE user_invitations
                     SET status = 'accepted',
                         accepted_at = NOW(),
                         created_user_id = %s
-                    WHERE token = %s
+                    WHERE id = %s
                       AND status = 'pending'
                     RETURNING id, email
-                """, (created_user_id, token))
+                """, (created_user_id, inv_id))
 
                 result = cur.fetchone()
 
