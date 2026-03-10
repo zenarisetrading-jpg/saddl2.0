@@ -24,7 +24,7 @@ from features.optimizer_shared.ui.heatmap import create_heatmap
 from features.optimizer_shared.logging import log_optimization_events
 from features.optimizer_shared.ppc_cascade import compute_ppc_cascade
 from features.optimizer_shared.campaign_recommendations import generate_campaign_recommendations
-from dev_resources.tests.bulk_validation_spec import OptimizationRecommendation
+from app_core.optimization_types import OptimizationRecommendation
 
 # UI Imports
 from features.optimizer_shared.ui.components import inject_optimizer_css

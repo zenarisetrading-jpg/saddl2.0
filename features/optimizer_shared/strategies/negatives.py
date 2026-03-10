@@ -11,11 +11,7 @@ from features.optimizer_shared.core import calculate_account_benchmarks
 from features.bulk_export import strip_targeting_prefix
 from app_core.data_hub import DataHub
 from app_core.data_loader import is_asin
-from dev_resources.tests.bulk_validation_spec import (
-    OptimizationRecommendation,
-    RecommendationType,
-    validate_recommendation
-)
+from app_core.optimization_types import OptimizationRecommendation, RecommendationType, validate_recommendation
 
 def enrich_with_ids(df: pd.DataFrame, bulk: pd.DataFrame) -> pd.DataFrame:
     """

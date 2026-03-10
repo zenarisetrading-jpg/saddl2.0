@@ -12,11 +12,7 @@ from features.optimizer_shared.strategies.negatives import enrich_with_ids
 from features.optimizer_shared.intelligence import build_commerce_lookup, compute_intelligence_flags
 from app_core.data_hub import DataHub
 from app_core.data_loader import is_asin
-from dev_resources.tests.bulk_validation_spec import (
-    OptimizationRecommendation,
-    RecommendationType,
-    validate_recommendation
-)
+from app_core.optimization_types import OptimizationRecommendation, RecommendationType, validate_recommendation
 
 # ==========================================
 # CONFIGURATION CONSTANTS (BID OPTIMIZER V2)
