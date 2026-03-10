@@ -166,7 +166,13 @@ def render_impact_dashboard_v2():
         return
 
     # Get available dates
-    available_dates = db_manager.get_available_dates(selected_client)
+    try:
+        available_dates = db_manager.get_available_dates(selected_client)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f'get_available_dates failed: {e}', exc_info=True)
+        st.error('Impact data could not be loaded — database temporarily unreachable. Please refresh.')
+        st.stop()
     if not available_dates:
         st.warning(f"⚠️ No action data found for account '{st.session_state.get('active_account_name', selected_client)}'. "
                    "Run the optimizer to log actions.")
@@ -197,7 +203,12 @@ def render_impact_dashboard_v2():
         # Get latest data date
         latest_data_date = None
         if hasattr(db_manager, 'get_latest_raw_data_date'):
-            latest_data_date = db_manager.get_latest_raw_data_date(selected_client)
+            try:
+                latest_data_date = db_manager.get_latest_raw_data_date(selected_client)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f'get_latest_raw_data_date failed: {e}', exc_info=True)
+                latest_data_date = None
         if not latest_data_date:
             period_info = full_summary.get('period_info', {})
             latest_data_date = period_info.get('after_end') or period_info.get('latest_date')
