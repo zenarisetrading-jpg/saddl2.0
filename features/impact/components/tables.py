@@ -87,6 +87,8 @@ def render_drill_down_table(impact_df: pd.DataFrame, show_migration_badge: bool 
 
         # Decision Outcome logic
         def get_decision_outcome(row):
+            if not row.get('is_mature', False):
+                return '🟡 Pending'
             action = str(row.get('action_type', '')).upper()
             di = row[impact_col] if pd.notna(row.get(impact_col)) else 0
             sa = row['spend_avoided'] if pd.notna(row.get('spend_avoided')) else 0

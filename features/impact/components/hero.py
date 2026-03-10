@@ -104,10 +104,12 @@ def render_hero_banner(
     non_drag_mask = df['market_tag'] != 'Market Drag'
     total_before_sales = df.loc[non_drag_mask, 'before_sales'].sum()
     total_after_sales = df.loc[non_drag_mask, 'observed_after_sales'].sum()
-    total_account_sales = total_before_sales + total_after_sales
-    incremental_pct = (attributed_impact / total_account_sales * 100) if total_account_sales > 0 else 0
-    incremental_sign = '+' if incremental_pct >= 0 else ''
-    incremental_badge = f"{incremental_sign}{incremental_pct:.1f}% of revenue" if abs(incremental_pct) > 0.1 else ""
+    if not total_after_sales or total_after_sales < 100:
+        incremental_pct = None
+    else:
+        incremental_pct = attributed_impact / total_after_sales * 100
+    incremental_sign = '+' if (incremental_pct or 0) >= 0 else ''
+    incremental_badge = f"{incremental_sign}{incremental_pct:.1f}% of revenue" if incremental_pct is not None and abs(incremental_pct) > 0.1 else ""
 
     # Progress bar calculation
     total_counted = offensive_count + defensive_count + gap_count
@@ -124,7 +126,7 @@ def render_hero_banner(
 
     # Build incremental badge HTML
     badge_html = ""
-    if incremental_badge:
+    if incremental_pct is not None and incremental_badge:
         badge_color = BRAND_COLORS['green'] if incremental_pct >= 0 else BRAND_COLORS['red']
         badge_html = f'<span style="display: inline-flex; align-items: center; gap: 4px; background: rgba(16, 185, 129, 0.15); color: {badge_color}; padding: 4px 12px; border-radius: 20px; font-size: 1rem; font-weight: 600; margin-left: 16px; vertical-align: middle;">{arrow_up_icon} {incremental_badge}</span>'
 

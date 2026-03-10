@@ -18,12 +18,12 @@ from features.dashboard.metrics import (
 
 def test_target_defaults():
     assert DEFAULT_TARGET_ROAS == 3.0
-    assert DEFAULT_TARGET_TACOS == 0.10
+    assert DEFAULT_TARGET_TACOS == 15.0
 
 
 def test_core_metric_division_safety():
     assert calculate_roas(300, 100) == 3.0
-    assert calculate_tacos(100, 1000) == 0.1
+    assert calculate_tacos(100, 1000) == 10.0
     assert calculate_cvr(25, 500) == 0.05
     assert calculate_organic_pct(700, 1000) == 0.7
     assert calculate_days_of_cover(420, 14) == 30.0

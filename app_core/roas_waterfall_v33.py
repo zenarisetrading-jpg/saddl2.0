@@ -54,14 +54,15 @@ def calculate_roas_waterfall_v33(
         after_sales = timeline['after_sales']
         before_spend = timeline['before_spend']
         before_sales = timeline['before_sales']
-        before_clicks = before_spend / 0.5 if before_spend > 0 else 0  # Estimate
-        after_clicks = after_spend / 0.5 if after_spend > 0 else 0  # Estimate
+        before_clicks = None
+        after_clicks = None
 
         # For click-based calculations, use action-level aggregation
         action_before_clicks = impact_df['before_clicks'].sum()
         action_after_clicks = impact_df['after_clicks'].sum()
 
-        if action_before_clicks > 0 and action_after_clicks > 0:
+        clicks_available = action_before_clicks > 0 and action_after_clicks > 0
+        if clicks_available:
             before_clicks = action_before_clicks
             after_clicks = action_after_clicks
     else:
@@ -73,6 +74,7 @@ def calculate_roas_waterfall_v33(
         after_spend = impact_df['observed_after_spend'].sum()
         after_sales = impact_df['observed_after_sales'].sum()
         after_clicks = impact_df['after_clicks'].sum()
+        clicks_available = True
 
         if before_spend == 0 or after_spend == 0:
             return _empty_waterfall()
@@ -95,8 +97,10 @@ def calculate_roas_waterfall_v33(
         # Fallback: Calculate it the same way v3.3 does
         baseline_spc = before_sales / before_clicks if before_clicks > 0 else 0
         actual_spc = after_sales / after_clicks if after_clicks > 0 else 0
-        market_shift = actual_spc / baseline_spc if baseline_spc > 0 else 1.0
-        market_shift = np.clip(market_shift, 0.5, 1.5)  # Same bounds as v3.3
+        raw_market_shift = actual_spc / baseline_spc if baseline_spc > 0 else 1.0
+        market_shift = raw_market_shift
+        if raw_market_shift < 0.5 or raw_market_shift > 1.5:
+            import logging; logging.getLogger(__name__).warning(f'Extreme market shift: {raw_market_shift:.3f}')
 
     # Market effect on ROAS (holding CPC constant)
     # If SPC dropped 12%, we EXPECT ROAS to drop proportionally
@@ -107,15 +111,16 @@ def calculate_roas_waterfall_v33(
     # =========================================================
     # Change in cost per click affects ROAS inversely
 
-    baseline_cpc = before_spend / before_clicks if before_clicks > 0 else 0
-    actual_cpc = after_spend / after_clicks if after_clicks > 0 else 0
-
-    cpc_change = actual_cpc / baseline_cpc if baseline_cpc > 0 else 1.0
-
-    # CPC effect on ROAS (inverse relationship)
-    # Independent of market adjustment (calculated separately)
-    # This captures: "How did CPC changes affect ROAS, holding SPC constant?"
-    cpc_effect_roas = baseline_roas * (1/cpc_change - 1) if cpc_change > 0 else 0
+    if clicks_available:
+        baseline_cpc = before_spend / before_clicks if before_clicks > 0 else 0
+        actual_cpc = after_spend / after_clicks if after_clicks > 0 else 0
+        cpc_change = actual_cpc / baseline_cpc if baseline_cpc > 0 else 1.0
+        cpc_effect_roas = baseline_roas * (1/cpc_change - 1) if cpc_change > 0 else 0
+    else:
+        baseline_cpc = None
+        actual_cpc = None
+        cpc_change = 1.0
+        cpc_effect_roas = 0
 
     # =========================================================
     # STEP 5: Structural Effects
@@ -214,8 +219,12 @@ def calculate_roas_waterfall_v33(
     # Break down market effect into CPC/CVR/AOV components for display
     # This is for INFORMATIONAL purposes only, not used in waterfall math
 
-    baseline_spc = before_sales / before_clicks if before_clicks > 0 else 0
-    actual_spc = after_sales / after_clicks if after_clicks > 0 else 0
+    if clicks_available:
+        baseline_spc = before_sales / before_clicks if before_clicks > 0 else 0
+        actual_spc = after_sales / after_clicks if after_clicks > 0 else 0
+    else:
+        baseline_spc = None
+        actual_spc = None
 
     # CVR estimation (if we had order data)
     # For now, we can show SPC change and CPC change
@@ -332,6 +341,10 @@ def calculate_roas_waterfall_v33(
         # Timeline metadata (v3.5 only)
         'timeline': timeline if timeline else None,
         'uses_timeline': timeline is not None,
+
+        # Data availability flags
+        'clicks_available': clicks_available,
+        'market_shift_clipped': False,
 
         # For "VALUE CREATED" box calculation
         'counterfactual_roas': round(max(0.01, counterfactual_roas), 2),

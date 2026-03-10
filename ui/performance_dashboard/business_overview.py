@@ -722,7 +722,7 @@ def compute_health_and_callouts(
 
         if key == "tacos_vs_target":
             text = (
-                f"TACOS {_format_percent(tacos_current)} vs {_format_percent(target_tacos)} target - {impact_verb} {abs(impact_points):.0f} points"
+                f"TACOS {_format_percent(tacos_current, points=True)} vs {_format_percent(target_tacos, points=True)} target - {impact_verb} {abs(impact_points):.0f} points"
                 if tacos_current is not None
                 else f"TACOS vs target - {impact_verb} {abs(impact_points):.0f} points"
             )
@@ -830,7 +830,7 @@ def build_tacos_daily_series(curr_period: pd.DataFrame, ad_spend_daily: pd.DataF
         axis=1,
     )
     tacos_series = tacos_series[
-        tacos_series["tacos"].notna() & (tacos_series["tacos"] > 0) & (tacos_series["tacos"] <= 1)
+        tacos_series["tacos"].notna() & (tacos_series["tacos"] > 0) & (tacos_series["tacos"] <= 100)
     ].copy()
     tacos_series["report_date"] = pd.to_datetime(tacos_series["report_day"], errors="coerce")
     return tacos_series[["report_date", "tacos"]].sort_values("report_date")
@@ -1228,7 +1228,7 @@ def _render_product_table(df: pd.DataFrame, currency: str) -> None:
             ).strip().format(
                 parent=row.get("SKU", "-"),
                 revenue=_format_currency(_safe_float(row.get("Revenue")), currency),
-                tacos=_format_percent(_safe_float(row.get("TACOS"), None)),
+                tacos=_format_percent(_safe_float(row.get("TACOS"), None), points=True),
                 cvr=_format_percent(_safe_float(row.get("CVR"), None)),
                 sessions=_format_number(_safe_float(row.get("Sessions"), None)),
                 chip=chip_class,
@@ -1638,17 +1638,17 @@ def _build_insights(
         critical.append(
             f"Estimated revenue at risk over next 14 days: {_format_currency(inventory_summary['revenue_at_risk'])}."
         )
-    if tacos_value is not None and tacos_value > 0.16:
-        critical.append(f"TACOS is elevated at {_format_percent(tacos_value)}; protect margin with tighter query controls.")
+    if tacos_value is not None and tacos_value > 16:
+        critical.append(f"TACOS is elevated at {_format_percent(tacos_value, points=True)}; protect margin with tighter query controls.")
     if cvr_delta is not None and cvr_delta < -8:
         critical.append(f"CVR trend deteriorated {_delta_text(cvr_delta)} versus prior window; investigate listing and Buy Box disruptions.")
 
     if product_table is not None and not product_table.empty:
-        healthy = product_table[(product_table["TACOS"] <= 0.10) & (product_table["CVR"] >= product_table["CVR"].median())]
+        healthy = product_table[(product_table["TACOS"] <= 10) & (product_table["CVR"] >= product_table["CVR"].median())]
         if not healthy.empty:
             top = healthy.sort_values("Revenue", ascending=False).iloc[0]
             growth.append(
-                f"{top['SKU']} has efficient TACOS ({_format_percent(top['TACOS'])}) with strong CVR; increase coverage incrementally."
+                f"{top['SKU']} has efficient TACOS ({_format_percent(top['TACOS'], points=True)}) with strong CVR; increase coverage incrementally."
             )
         high_organic = product_table.sort_values("Revenue", ascending=False).head(1)
         if not high_organic.empty and organic_pct is not None and organic_pct >= 0.55:
@@ -1660,11 +1660,11 @@ def _build_insights(
         growth.append(f"ROAS at {roas_value:.2f}x gives room to scale high-intent placements without breaking efficiency guardrails.")
 
     if product_table is not None and not product_table.empty:
-        inefficient = product_table[(product_table["TACOS"] > 0.18) & (product_table["Revenue"] > 0)]
+        inefficient = product_table[(product_table["TACOS"] > 18) & (product_table["Revenue"] > 0)]
         if not inefficient.empty:
             top_bad = inefficient.sort_values("TACOS", ascending=False).iloc[0]
             efficiency.append(
-                f"Rebalance spend from {top_bad['SKU']} (TACOS {_format_percent(top_bad['TACOS'])}) to lower-TACOS parents."
+                f"Rebalance spend from {top_bad['SKU']} (TACOS {_format_percent(top_bad['TACOS'], points=True)}) to lower-TACOS parents."
             )
         weak_cvr = product_table[product_table["CVR"] < max(0.02, product_table["CVR"].median() * 0.7)]
         if not weak_cvr.empty:
@@ -1951,7 +1951,7 @@ def render_business_overview() -> None:
     with r1[2]:
         _hero_card("Contribution Margin", _format_currency(margin_proxy, currency), "Rev - Ad Spend - COGS 30% (Est)", _delta_text(calculate_delta_pct(margin_proxy, prev_margin)))
     with r1[3]:
-        _hero_card("TACOS", _format_percent(global_tacos), "Total Ad Spend / Total Sales", _delta_text(calculate_delta_pct(global_tacos, prev_tacos)), inverse_trend=True)
+        _hero_card("TACOS", _format_percent(global_tacos, points=True), "Total Ad Spend / Total Sales", _delta_text(calculate_delta_pct(global_tacos, prev_tacos)), inverse_trend=True)
 
     # --- ROW 2: DEMAND & CONVERSION ENGINE ---
     _section_header("Demand & Conversion Engine", "Diagnose why revenue moved across the funnel")
@@ -1991,7 +1991,7 @@ def render_business_overview() -> None:
         with grid[0]:
             render_metric_card("ROAS", f"{global_roas:.2f}x", _delta_text(calculate_delta_pct(global_roas, prev_roas)))
         with grid[1]:
-            render_metric_card("ACOS", _format_percent(global_acos), _delta_text(calculate_delta_pct(global_acos, prev_acos)), inverse=True)
+            render_metric_card("ACOS", _format_percent(global_acos, points=True), _delta_text(calculate_delta_pct(global_acos, prev_acos)), inverse=True)
 
         with st.container(border=True):
             st.markdown("**Business TACOS**")

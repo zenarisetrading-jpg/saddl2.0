@@ -29,7 +29,8 @@ class ImpactMetrics:
     
     # === Core Impact Values ===
     attributed_impact: float          # The main "Value Created" number
-    decision_impact: float            # Raw impact before attribution
+    decision_impact: float            # Impact excluding Market Drag rows
+    decision_impact_raw: float        # Impact including all rows (preserved for debugging)
     decision_impact_roas: float       # Impact / Spend ratio
     
     # === Breakdown by Type ===
@@ -40,6 +41,7 @@ class ImpactMetrics:
     # === Spend Metrics ===
     total_spend: float                # Total ad spend in period
     spend_avoided: float              # Spend saved from defensive actions
+    spend_filtered_impact: float      # Impact for actions that affected ROAS (non-drag, attributed_impact col)
     
     # === Action Counts ===
     total_actions: int                # All actions in dataset
@@ -140,8 +142,13 @@ class ImpactMetrics:
         non_drag_mask = working_df['market_tag'] != 'Market Drag'
         total_spend = working_df.loc[non_drag_mask, spend_col].sum() if spend_col in working_df.columns else 0.0
         
-        # === Step 6: Raw decision impact (all, including drag) ===
-        decision_impact = working_df[impact_col].sum()
+        # === Step 6: Decision impact (excludes Market Drag rows) ===
+        decision_impact_df = working_df[working_df['market_tag'] != 'Market Drag'] if 'market_tag' in working_df.columns else working_df
+        decision_impact = decision_impact_df[impact_col].sum()
+        decision_impact_raw = working_df[impact_col].sum()  # All rows including drag (preserved for debugging)
+
+        # === Step 6b: Spend-filtered impact (non-drag rows only, same as decision_impact) ===
+        spend_filtered_impact = float(decision_impact)
         
         # === Step 7: Spend avoided (from spend_avoided column if exists) ===
         spend_avoided = working_df['spend_avoided'].sum() if 'spend_avoided' in working_df.columns else 0.0
@@ -159,16 +166,18 @@ class ImpactMetrics:
             # Core values
             attributed_impact=float(attributed),
             decision_impact=float(decision_impact),
+            decision_impact_raw=float(decision_impact_raw),
             decision_impact_roas=float(attributed / total_spend) if total_spend > 0 else 0.0,
-            
+
             # Breakdown
             offensive_value=float(offensive_val),
             defensive_value=float(defensive_val),
             gap_value=float(gap_val),
-            
+
             # Spend
             total_spend=float(total_spend),
             spend_avoided=float(spend_avoided),
+            spend_filtered_impact=spend_filtered_impact,
             
             # Counts
             total_actions=int(total_actions),
@@ -193,12 +202,14 @@ class ImpactMetrics:
         return cls(
             attributed_impact=0.0,
             decision_impact=0.0,
+            decision_impact_raw=0.0,
             decision_impact_roas=0.0,
             offensive_value=0.0,
             defensive_value=0.0,
             gap_value=0.0,
             total_spend=0.0,
             spend_avoided=0.0,
+            spend_filtered_impact=0.0,
             total_actions=0,
             mature_actions=0,
             offensive_actions=0,
@@ -233,7 +244,9 @@ class ImpactMetrics:
         return {
             'attributed_impact': self.attributed_impact,
             'decision_impact': self.decision_impact,
+            'decision_impact_raw': self.decision_impact_raw,
             'decision_impact_roas': self.decision_impact_roas,
+            'spend_filtered_impact': self.spend_filtered_impact,
             'offensive_value': self.offensive_value,
             'defensive_value': self.defensive_value,
             'gap_value': self.gap_value,

@@ -62,6 +62,7 @@ def calculate_ppc_metrics(
 
     # ACOS: Spend / Sales (ALWAYS in percentage format, regardless of parameter)
     # Both optimizer.py and performance_snapshot.py use percentage for ACOS
+    # Returns percentage (e.g., 25 for 25% ACoS)
     df['ACOS'] = np.where(
         df['Sales'] > 0,
         (df['Spend'] / df['Sales']) * 100,

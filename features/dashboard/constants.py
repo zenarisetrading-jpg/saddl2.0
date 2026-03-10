@@ -2,5 +2,5 @@
 
 # Build-safe defaults when client/account targets are not configured.
 DEFAULT_TARGET_ROAS = 3.0
-DEFAULT_TARGET_TACOS = 0.15  # 15 % — updated from original 10 %
+DEFAULT_TARGET_TACOS = 15.0  # 15 % — percentage scale (15.0 means 15%)
 

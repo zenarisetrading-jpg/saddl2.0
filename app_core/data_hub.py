@@ -198,19 +198,9 @@ class DataHub:
                 raise Exception(save_error)
             
         except Exception as e:
-            save_error = str(e)
-            # Mark save as failed in session state
-            if 'last_stats_save' not in st.session_state:
-                st.session_state.last_stats_save = {}
-            st.session_state.last_stats_save['success'] = False
-            st.session_state.last_stats_save['error'] = save_error
-            st.session_state.last_stats_save['timestamp'] = datetime.now()
-            
-            # Show ERROR prominently - user MUST see this
-            st.error(f"⚠️ DATABASE SAVE FAILED! Data is in memory only and will be LOST on restart. Error: {e}")
-            st.warning("Please try uploading again or check database connection.")
-            
-            return True, f"Loaded {len(df_renamed):,} rows (⚠️ NOT SAVED TO DB - {save_error})"
+            import logging
+            logging.getLogger(__name__).error(f'data_hub DB save failed: {e}', exc_info=True)
+            return (False, f'Database save failed: {str(e)}')
     
 
     def _populate_asin_cache(self, df: pd.DataFrame):

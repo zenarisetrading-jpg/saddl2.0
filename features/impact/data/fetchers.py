@@ -37,17 +37,9 @@ def fetch_impact_data(
         full_summary = db.get_impact_summary(client_id, before_days=before_days, after_days=after_days)
         return impact_df, full_summary
     except Exception as e:
-        # Return empty structures on failure to prevent UI crash
-        print(f"Cache miss error: {e}")
-        return pd.DataFrame(), {
-            'total_actions': 0,
-            'roas_before': 0, 'roas_after': 0, 'roas_lift_pct': 0,
-            'incremental_revenue': 0,
-            'p_value': 1.0, 'is_significant': False, 'confidence_pct': 0,
-            'implementation_rate': 0, 'confirmed_impact': 0, 'pending': 0,
-            'win_rate': 0, 'winners': 0, 'losers': 0,
-            'by_action_type': {}
-        }
+        import logging
+        logging.getLogger(__name__).error(f'fetch_impact_data failed: {e}', exc_info=True)
+        return {'status': 'error', 'error_message': str(e), 'data': None, 'summary': None}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)

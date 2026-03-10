@@ -243,48 +243,9 @@ def render_impact_analytics(
     chart_c1, chart_c2 = st.columns(2, gap="medium")
 
     with chart_c1:
-        # CRITICAL FIX: Calculate spend-filtered impact for ROAS waterfall
-        # The waterfall should only include actions that affected ROAS (spend > 0)
-        # NOT the full canonical_metrics which includes zero-spend actions
-
-        # Use the impact_df that's passed in (already filtered to active_df with spend)
-        # Calculate the decision impact directly from this filtered dataset
-        if not impact_df.empty:
-            # Determine which column to use
-            has_v33 = 'final_impact_v33' in impact_df.columns
-            has_v32 = 'final_decision_impact' in impact_df.columns
-
-            if has_v33:
-                impact_col = 'final_impact_v33'
-            elif has_v32:
-                impact_col = 'final_decision_impact'
-            else:
-                impact_col = 'decision_impact'
-
-            # Debug: Show what we're using
-            # st.caption(f"🔍 Column check: v3.3={has_v33}, v3.2={has_v32}, using: {impact_col}")
-            # st.caption(f"🔍 Total rows in impact_df: {len(impact_df)}")
-
-            # Exclude Market Drag from attribution
-            if 'market_tag' in impact_df.columns:
-                has_drag = (impact_df['market_tag'] == 'Market Drag').sum()
-                non_drag = impact_df[impact_df['market_tag'] != 'Market Drag']
-                spend_filtered_impact = non_drag[impact_col].sum()
-                # st.caption(f"🔍 Market Drag actions excluded: {has_drag}")
-                # st.caption(f"🔍 Non-drag rows: {len(non_drag)}, Impact: ${spend_filtered_impact:,.2f}")
-            else:
-                spend_filtered_impact = impact_df[impact_col].sum()
-                # st.caption(f"🔍 No market_tag column, using all rows")
-
-            # Show column sums for debugging
-            # if has_v33:
-            #     v33_sum = impact_df['final_impact_v33'].sum()
-            #     st.caption(f"🔍 final_impact_v33 sum (all rows): ${v33_sum:,.2f}")
-            # if has_v32:
-            #     v32_sum = impact_df['final_decision_impact'].sum()
-            #     st.caption(f"🔍 final_decision_impact sum (all rows): ${v32_sum:,.2f}")
-        else:
-            spend_filtered_impact = 0.0
+        # Read spend_filtered_impact from canonical_metrics (ImpactMetrics single source of truth).
+        # This value is pre-computed in ImpactMetrics.from_dataframe() as non-drag rows only.
+        spend_filtered_impact = canonical_metrics.spend_filtered_impact if canonical_metrics is not None else 0.0
 
         # Pass the spend-filtered impact to waterfall (v3.4 - action-level aggregation)
         # NOTE: We do NOT pass timeline here - it's only for display context

@@ -104,6 +104,9 @@ def _fetch_ghost_account_ids_cached(registered_ids_key: str) -> set:
 def render_data_hub():
     """Render the data hub upload interface."""
 
+    if st.session_state.get('upload_save_failed'):
+        st.warning('⚠️  A previous upload was not saved to the database. Please retry the upload.')
+
     # Theme-aware icon color
     icon_color = "#94a3b8"
     folder_icon = f'<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="{icon_color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"></path></svg>'
@@ -366,12 +369,13 @@ def render_data_hub():
                     if confirm:
                         with st.spinner("Processing..."):
                             success, message = hub.upload_search_term_report(str_file)
-                            # Store result in session state so it persists across rerun
                             if success:
-                                st.toast(message, icon="✅")
+                                st.success('Data saved successfully.')
+                                st.session_state.pop('upload_save_failed', None)
                                 st.rerun()
                             else:
-                                st.error(f"❌ {message}")
+                                st.error(f'SAVE FAILED — your data is not persisted. Do not close this tab. Error: {message}')
+                                st.session_state['upload_save_failed'] = True
 
     
     with row1_col2:

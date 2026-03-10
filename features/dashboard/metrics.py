@@ -19,7 +19,11 @@ def calculate_roas(ad_sales: float, ad_spend: float) -> Optional[float]:
 
 
 def calculate_tacos(ad_spend: float, total_sales: float) -> Optional[float]:
-    return _safe_div(ad_spend, total_sales)
+    result = _safe_div(ad_spend, total_sales)
+    if result is None:
+        return None
+    # Returns percentage scale — 25 means 25% TACoS
+    return result * 100
 
 
 def calculate_cvr(orders: float, sessions: float) -> Optional[float]:

@@ -188,7 +188,11 @@ def render_impact_dashboard_v2():
         after_days = horizon_config["days"]
         buffer_days = IMPACT_WINDOWS["maturity_buffer_days"]
 
-        impact_df, full_summary = fetch_impact_data(selected_client, test_mode, before_days, after_days, cache_version)
+        result = fetch_impact_data(selected_client, test_mode, before_days, after_days, cache_version)
+        if isinstance(result, dict) and result.get('status') == 'error':
+            st.error('Impact data could not be loaded. This is a temporary error — not a reflection of your optimization results. Please refresh the page.')
+            st.stop()
+        impact_df, full_summary = result
 
         # Get latest data date
         latest_data_date = None

@@ -84,7 +84,10 @@ def calculate_roas_waterfall(df: pd.DataFrame, decision_impact_dollars: float) -
     # DECISION IMPACT
     # =========================================================
     # Convert dollar impact to ROAS contribution
-    decision_effect_roas = decision_impact_dollars / after_spend if after_spend > 0 else 0
+    effective_spend = max(after_spend, 10.0) if after_spend is not None else 10.0
+    if after_spend is not None and after_spend < 100:
+        import logging; logging.getLogger(__name__).warning(f'Low spend action in ROAS waterfall: after_spend={after_spend}')
+    decision_effect_roas = decision_impact_dollars / effective_spend if after_spend is not None and after_spend > 0 else 0
 
     # =========================================================
     # RESIDUAL
