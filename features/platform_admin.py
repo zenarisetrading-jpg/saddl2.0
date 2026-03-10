@@ -13,6 +13,10 @@ from config.design_system import COLORS, TYPOGRAPHY
 
 def render_platform_admin():
     """Render the main Platform Admin dashboard."""
+    from app_core.auth.permissions import has_permission
+    if not has_permission(st.session_state.get('user'), 'platform_admin'):
+        st.error('Access denied — platform administrator role required.')
+        st.stop()
     st.markdown(f"## Platform Admin Dashboard")
     st.markdown("Manage client organizations and platform settings.")
 

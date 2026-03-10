@@ -10,6 +10,7 @@ Replaces legacy Supabase Auth (auth/service.py).
 import os
 import os
 import re
+import secrets
 try:
     import streamlit as st
 except ImportError:
@@ -234,12 +235,13 @@ class AuthService:
             print(f"List Users Error: {e}")
             return []
 
-    def create_user_invite(self, email: str, role: Role, org_id: str, temp_password: str = "Welcome123!") -> Dict[str, Any]:
+    def create_user_invite(self, email: str, role: Role, org_id: str) -> Dict[str, Any]:
         """
         Create a new user (Invite flow).
         Since we don't have email sending yet, we set a temp password.
         Returns: {success: bool, error: str, temp_password: str}
         """
+        temp_password = secrets.token_urlsafe(16)
         if not email or not role or not org_id:
             return {"success": False, "error": "Missing fields"}
 

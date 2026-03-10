@@ -10,8 +10,11 @@ import uuid
 from app_core.auth.service import AuthService
 from app_core.auth.models import Role
 
-DEFAULT_ADMIN_EMAIL = "admin@saddl.io"
-DEFAULT_ADMIN_PASSWORD = "admin123"
+DEFAULT_ADMIN_EMAIL = os.environ.get('SADDL_BOOTSTRAP_EMAIL')
+DEFAULT_ADMIN_PASSWORD = os.environ.get('SADDL_BOOTSTRAP_PASSWORD')
+
+if not DEFAULT_ADMIN_EMAIL or not DEFAULT_ADMIN_PASSWORD:
+    raise RuntimeError('SADDL_BOOTSTRAP_EMAIL and SADDL_BOOTSTRAP_PASSWORD must be set before first run')
 
 def seed_initial_data():
     """

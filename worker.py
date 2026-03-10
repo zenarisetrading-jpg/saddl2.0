@@ -127,9 +127,6 @@ def _run_backfill_for(
 
     log.info("  Marketplace : %s  endpoint=%s", marketplace_id, region_endpoint)
 
-    prev_token = os.environ.get("LWA_REFRESH_TOKEN_UAE")
-    os.environ["LWA_REFRESH_TOKEN_UAE"] = refresh_token
-
     # Clear cached access token so we auth with this client's token
     try:
         from pipelines import sp_api_client as _spc  # type: ignore
@@ -149,7 +146,8 @@ def _run_backfill_for(
         )
 
         settings     = get_settings(
-            marketplace_id=marketplace_id, region_endpoint=region_endpoint
+            marketplace_id=marketplace_id, region_endpoint=region_endpoint,
+            lwa_refresh_token=refresh_token,
         )
         access_token = get_token(force_refresh=True)
         today        = date.today()
@@ -221,6 +219,7 @@ def _run_backfill_for(
 
         log.info("  [1/4] ✓ %d rows written across %d days (account_id=%s)",
                  rows_sc, days_done, client_id)
+        api_call_succeeded = True
 
 
 
@@ -299,6 +298,20 @@ def _run_backfill_for(
         except Exception as bsr_exc:
             log.warning("  [4/4] BSR failed (non-fatal): %s", bsr_exc)
 
+        # ── New-account fast-path ──────────────────────────────────────
+        # If the SP-API calls succeeded (no fatal exception) but returned
+        # zero sales rows, the account is genuinely new with no history.
+        # Mark it active immediately so onboarding completes rather than
+        # retrying indefinitely on a permanently empty response.
+        if api_call_succeeded and rows_sc == 0:
+            log.info(
+                "Account has no sales history — marking active as new account  client=%s",
+                client_id,
+            )
+            _upsert_account_link(client_id, settings.marketplace_id)
+            _set_status(client_id, "active")
+            return
+
         # ── Sanity check before declaring victory ─────────────────────
         # If both Data Kiosk (0 rows) AND FBA inventory failed (None),
         # the account has no data at all — most likely a transient Amazon
@@ -326,10 +339,6 @@ def _run_backfill_for(
         _set_status(client_id, "connected")   # Reset so worker retries next cycle
 
     finally:
-        if prev_token is not None:
-            os.environ["LWA_REFRESH_TOKEN_UAE"] = prev_token
-        else:
-            os.environ.pop("LWA_REFRESH_TOKEN_UAE", None)
         try:
             from pipelines import sp_api_client as _spc  # type: ignore
             _spc._token_cache.update({"access_token": None, "expires_at": None})
