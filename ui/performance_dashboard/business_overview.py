@@ -342,7 +342,6 @@ def fetch_business_overview_data(
     account_id, marketplace_id = _resolve_spapi_scope(db, client_id)
 
     traffic_daily = pd.DataFrame()
-    traffic_by_asin = pd.DataFrame()
     account_daily = pd.DataFrame()
     ad_spend_daily = pd.DataFrame()
     product_table_raw = pd.DataFrame()
@@ -393,103 +392,18 @@ def fetch_business_overview_data(
         ORDER BY report_date
     """
 
-    # ── Parallel fetch: target_stats, traffic, account_daily, ad_spend ────────
-    from concurrent.futures import ThreadPoolExecutor
-
-    def _run_target():
-        try:
-            df = db.get_target_stats_df(client_id, start_date=prev_start)
-            return df if df is not None else pd.DataFrame()
-        except Exception:
-            return pd.DataFrame()
-
-    def _run_traffic():
-        try:
-            return _to_df_query(db, traffic_q, (account_id, marketplace_id, prev_start, end_date))
-        except Exception:
-            return pd.DataFrame(columns=["report_date", "sessions", "page_views", "units", "revenue"])
-
-    def _run_account_daily():
-        try:
-            return _to_df_query(db, account_daily_q, (account_id, marketplace_id, prev_start, end_date))
-        except Exception:
-            return pd.DataFrame(columns=[
-                "report_date", "total_ordered_revenue", "total_units_ordered",
-                "total_page_views", "total_sessions", "ad_attributed_revenue",
-                "organic_revenue", "organic_share_pct", "tacos",
-            ])
-
-    def _run_ad_spend():
-        try:
-            return _to_df_query(db, ad_spend_q, (client_id, prev_start, end_date))
-        except Exception:
-            return pd.DataFrame(columns=["report_date", "ad_spend", "ad_sales"])
-
-    with ThreadPoolExecutor(max_workers=4) as _pool:
-        _f_target  = _pool.submit(_run_target)
-        _f_traffic = _pool.submit(_run_traffic)
-        _f_acct    = _pool.submit(_run_account_daily)
-        _f_spend   = _pool.submit(_run_ad_spend)
-        target_df    = _f_target.result()
-        traffic_daily = _f_traffic.result()
-        account_daily = _f_acct.result()
-        ad_spend_daily = _f_spend.result()
-
-    if not target_df.empty and "Date" in target_df.columns:
-        target_df = target_df.copy()
-        target_df["Date"] = pd.to_datetime(target_df["Date"], errors="coerce").dt.date
-
-    target_current = target_df[
-        (target_df["Date"] >= start_date) & (target_df["Date"] <= end_date)
-    ].copy() if not target_df.empty else pd.DataFrame()
-    target_previous = target_df[
-        (target_df["Date"] >= prev_start) & (target_df["Date"] <= prev_end)
-    ].copy() if not target_df.empty else pd.DataFrame()
-
-    if not traffic_daily.empty:
-        traffic_daily["report_date"] = pd.to_datetime(traffic_daily["report_date"], errors="coerce")
-    if not account_daily.empty:
-        account_daily["report_date"] = pd.to_datetime(account_daily["report_date"], errors="coerce")
-    if not ad_spend_daily.empty:
-        ad_spend_daily["report_date"] = pd.to_datetime(ad_spend_daily["report_date"], errors="coerce")
-
-    if spapi_available:
-        traffic_asin_q = """
-            SELECT
-                child_asin AS asin,
-                SUM(COALESCE(sessions, 0)) AS sessions,
-                SUM(COALESCE(page_views, 0)) AS page_views,
-                SUM(COALESCE(units_ordered, 0)) AS units,
-                SUM(COALESCE(ordered_revenue, 0)) AS sales
-            FROM sc_raw.sales_traffic
-            WHERE account_id = %s
-              AND marketplace_id = %s
-              AND report_date BETWEEN %s AND %s
-            GROUP BY child_asin
-        """
-        try:
-            traffic_by_asin = _to_df_query(db, traffic_asin_q, (account_id, marketplace_id, start_date, end_date))
-        except Exception:
-            traffic_by_asin = pd.DataFrame(columns=["asin", "sessions", "page_views", "units", "sales"])
-
-        inv_q = """
-            SELECT DISTINCT ON (asin)
-                asin,
-                COALESCE(sku, '') AS sku,
-                COALESCE(product_name, '') AS product_name,
-                COALESCE(afn_fulfillable_quantity, 0) AS afn_fulfillable_quantity,
-                COALESCE(afn_total_quantity, 0) AS afn_total_quantity,
-                snapshot_date
-            FROM sc_raw.fba_inventory
-            WHERE client_id = %s
-            ORDER BY asin, snapshot_date DESC
-        """
-        try:
-            inventory_raw = _to_df_query(db, inv_q, (client_id,))
-        except Exception:
-            inventory_raw = pd.DataFrame(
-                columns=["asin", "sku", "product_name", "afn_fulfillable_quantity", "afn_total_quantity", "snapshot_date"]
-            )
+    inv_q = """
+        SELECT DISTINCT ON (asin)
+            asin,
+            COALESCE(sku, '') AS sku,
+            COALESCE(product_name, '') AS product_name,
+            COALESCE(afn_fulfillable_quantity, 0) AS afn_fulfillable_quantity,
+            COALESCE(afn_total_quantity, 0) AS afn_total_quantity,
+            snapshot_date
+        FROM sc_raw.fba_inventory
+        WHERE client_id = %s
+        ORDER BY asin, snapshot_date DESC
+    """
 
     product_q = """
         WITH sales_by_asin AS (
@@ -627,28 +541,105 @@ def fetch_business_overview_data(
             END AS days_of_cover
         FROM parent_rollup pr
     """
-    try:
-        product_table_raw = _to_df_query(
-            db,
-            product_q,
-            (
-                account_id,
-                marketplace_id,
-                start_date,
-                end_date,
-                client_id,
-                client_id,
-                start_date,
-                end_date,
-                client_id,
-                float(max(window_days, 1)),
-            ),
-        )
-    except Exception:
-        # SQLite fallback without FULL OUTER JOIN
-        product_table_raw = pd.DataFrame(
-            columns=["asin", "parent_asin_sku", "sku", "sessions", "page_views", "units", "sales", "ad_sales", "ad_spend"]
-        )
+
+    # ── Parallel fetch: all independent queries ──────────────────────────────
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _run_target():
+        try:
+            df = db.get_target_stats_df(client_id, start_date=prev_start)
+            return df if df is not None else pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
+
+    def _run_traffic():
+        try:
+            return _to_df_query(db, traffic_q, (account_id, marketplace_id, prev_start, end_date))
+        except Exception:
+            return pd.DataFrame(columns=["report_date", "sessions", "page_views", "units", "revenue"])
+
+    def _run_account_daily():
+        try:
+            return _to_df_query(db, account_daily_q, (account_id, marketplace_id, prev_start, end_date))
+        except Exception:
+            return pd.DataFrame(columns=[
+                "report_date", "total_ordered_revenue", "total_units_ordered",
+                "total_page_views", "total_sessions", "ad_attributed_revenue",
+                "organic_revenue", "organic_share_pct", "tacos",
+            ])
+
+    def _run_ad_spend():
+        try:
+            return _to_df_query(db, ad_spend_q, (client_id, prev_start, end_date))
+        except Exception:
+            return pd.DataFrame(columns=["report_date", "ad_spend", "ad_sales"])
+
+    def _run_inventory():
+        if not spapi_available:
+            return pd.DataFrame(
+                columns=["asin", "sku", "product_name", "afn_fulfillable_quantity", "afn_total_quantity", "snapshot_date"]
+            )
+        try:
+            return _to_df_query(db, inv_q, (client_id,))
+        except Exception:
+            return pd.DataFrame(
+                columns=["asin", "sku", "product_name", "afn_fulfillable_quantity", "afn_total_quantity", "snapshot_date"]
+            )
+
+    def _run_product():
+        try:
+            return _to_df_query(
+                db,
+                product_q,
+                (
+                    account_id,
+                    marketplace_id,
+                    start_date,
+                    end_date,
+                    client_id,
+                    client_id,
+                    start_date,
+                    end_date,
+                    client_id,
+                    float(max(window_days, 1)),
+                ),
+            )
+        except Exception:
+            return pd.DataFrame(
+                columns=["asin", "parent_asin_sku", "sku", "sessions", "page_views", "units", "sales", "ad_sales", "ad_spend"]
+            )
+
+    with ThreadPoolExecutor(max_workers=4) as _pool:
+        _f_target    = _pool.submit(_run_target)
+        _f_traffic   = _pool.submit(_run_traffic)
+        _f_acct      = _pool.submit(_run_account_daily)
+        _f_spend     = _pool.submit(_run_ad_spend)
+        _f_inventory = _pool.submit(_run_inventory)
+        _f_product   = _pool.submit(_run_product)
+        target_df      = _f_target.result()
+        traffic_daily  = _f_traffic.result()
+        account_daily  = _f_acct.result()
+        ad_spend_daily = _f_spend.result()
+        inventory_raw  = _f_inventory.result()
+        product_table_raw = _f_product.result()
+
+    if not target_df.empty and "Date" in target_df.columns:
+        target_df = target_df.copy()
+        target_df["Date"] = pd.to_datetime(target_df["Date"], errors="coerce").dt.date
+
+    target_current = target_df[
+        (target_df["Date"] >= start_date) & (target_df["Date"] <= end_date)
+    ].copy() if not target_df.empty else pd.DataFrame()
+    target_previous = target_df[
+        (target_df["Date"] >= prev_start) & (target_df["Date"] <= prev_end)
+    ].copy() if not target_df.empty else pd.DataFrame()
+
+    if not traffic_daily.empty:
+        traffic_daily["report_date"] = pd.to_datetime(traffic_daily["report_date"], errors="coerce")
+    if not account_daily.empty:
+        account_daily["report_date"] = pd.to_datetime(account_daily["report_date"], errors="coerce")
+    if not ad_spend_daily.empty:
+        ad_spend_daily["report_date"] = pd.to_datetime(ad_spend_daily["report_date"], errors="coerce")
 
     if product_table_raw is None:
         product_table_raw = pd.DataFrame()
@@ -663,7 +654,6 @@ def fetch_business_overview_data(
         "target_current": target_current,
         "target_previous": target_previous,
         "traffic_daily": traffic_daily,
-        "traffic_by_asin": traffic_by_asin,
         "account_daily": account_daily,
         "ad_spend_daily": ad_spend_daily,
         "product_table_raw": product_table_raw,
@@ -769,10 +759,13 @@ def build_tacos_trend_figure(df: pd.DataFrame, target_tacos: Optional[float]) ->
                 marker=dict(size=6, color="#93c5fd"),
             )
         )
+        # target_tacos arrives as a ratio (e.g. 0.15); tacos data is already
+        # in percentage points (e.g. 23.8), so normalise target to match.
+        target_pct = (target * 100) if target < 1 else target
         fig.add_trace(
             go.Scatter(
                 x=df["report_date"],
-                y=[target] * len(df),
+                y=[target_pct] * len(df),
                 mode="lines",
                 name="Target TACOS",
                 line=dict(width=2, dash="dash", color="#f59e0b"),
@@ -784,7 +777,7 @@ def build_tacos_trend_figure(df: pd.DataFrame, target_tacos: Optional[float]) ->
         font=dict(color="#d1d5db"),
         margin=dict(l=10, r=10, t=12, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.01, x=0),
-        yaxis=dict(tickformat=".0%", gridcolor="rgba(75,85,99,0.4)", zeroline=False),
+        yaxis=dict(tickformat=".1f", ticksuffix="%", gridcolor="rgba(75,85,99,0.4)", zeroline=False),
         xaxis=dict(showgrid=False),
         hovermode="x unified",
     )

@@ -124,8 +124,8 @@ serve(async (req) => {
   // Verify the state param corresponds to a known client before writing tokens.
   const { data: existingClient, error: lookupError } = await supabase
     .from("client_settings")
-    .select("id")
-    .eq("id", state)
+    .select("client_id")
+    .eq("client_id", state)
     .maybeSingle();
 
   if (lookupError) {
