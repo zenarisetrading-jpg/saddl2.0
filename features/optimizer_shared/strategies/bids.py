@@ -163,8 +163,33 @@ def calculate_bid_optimizations(
             
         return False
         
-    # Apply Exclusion Filter
-    mask_excluded = df.apply(is_excluded, axis=1)
+    # Apply Exclusion Filter (vectorized)
+    # Normalise the two text columns once
+    _cst_col = df.get("Customer Search Term", pd.Series("", index=df.index)).fillna("").str.strip().str.lower()
+    _tgt_col = df.get("Targeting", pd.Series("", index=df.index)).fillna("").str.strip().str.lower()
+    _camp_col = df.get("Campaign Name", pd.Series("", index=df.index)).fillna("").str.strip()
+    _ag_col = df.get("Ad Group Name", pd.Series("", index=df.index)).fillna("").str.strip()
+
+    if harvested_terms:
+        _mask_harvest = _cst_col.isin(harvested_terms) | _tgt_col.isin(harvested_terms)
+    else:
+        _mask_harvest = pd.Series(False, index=df.index)
+
+    if negative_terms:
+        # Build per-row (camp, ag, term) tuples for both CST and Targeting
+        _neg_cst_mask = pd.Series(
+            [t in negative_terms for t in zip(_camp_col, _ag_col, _cst_col)],
+            index=df.index,
+        )
+        _neg_tgt_mask = pd.Series(
+            [t in negative_terms for t in zip(_camp_col, _ag_col, _tgt_col)],
+            index=df.index,
+        )
+        _mask_negative = _neg_cst_mask | _neg_tgt_mask
+    else:
+        _mask_negative = pd.Series(False, index=df.index)
+
+    mask_excluded = _mask_harvest | _mask_negative
     df_clean = df[~mask_excluded].copy()
     
     if df_clean.empty:
@@ -230,11 +255,20 @@ def calculate_bid_optimizations(
     # NOT asin-expanded or category targets, even if match_type is "auto" or "-"
     
     # First identify PT and Category targets (takes precedence)
-    mask_pt_targeting = df_clean["Targeting"].apply(is_pt_targeting)
-    mask_category_targeting = df_clean["Targeting"].apply(is_category_targeting)
-    
+    # Vectorized: pre-compute normalised targeting Series once, then use str ops
+    _tgt_norm = df_clean["Targeting"].astype(str).str.strip().str.lower()
+    mask_pt_targeting = (
+        _tgt_norm.str.contains("asin=", regex=False) |
+        _tgt_norm.str.contains("asin-expanded=", regex=False) |
+        (_tgt_norm.apply(is_asin) & ~_tgt_norm.str.startswith("category"))
+    )
+    mask_category_targeting = (
+        _tgt_norm.str.startswith("category=") |
+        (_tgt_norm.str.startswith("category") & _tgt_norm.str.contains("=", regex=False))
+    )
+
     # Auto bucket: targeting type is in AUTO_TYPES AND NOT a PT/Category target
-    mask_auto_by_targeting = df_clean["Targeting"].apply(lambda x: str(x).lower().strip() in AUTO_TYPES)
+    mask_auto_by_targeting = _tgt_norm.isin(AUTO_TYPES)
     mask_auto_by_matchtype = df_clean["Match Type"].str.lower().isin(["auto", "-"])
     mask_auto = (mask_auto_by_targeting | mask_auto_by_matchtype) & (~mask_pt_targeting) & (~mask_category_targeting)
     
@@ -345,11 +379,27 @@ def _process_bucket(segment_df: pd.DataFrame, config: dict, bucket_name: str, un
         # This preserves targeting type while avoiding individual ASIN grouping
         segment_df["_group_key"] = segment_df["_targeting_norm"]
     elif has_keyword_id or has_targeting_id:
-        # For keywords/PT: use IDs for grouping
-        segment_df["_group_key"] = segment_df.apply(
-            lambda r: str(r.get("KeywordId") or r.get("TargetingId") or r["_targeting_norm"]).strip(),
-            axis=1
-        )
+        # For keywords/PT: use IDs for grouping (vectorized)
+        # Priority: KeywordId → TargetingId → _targeting_norm (first truthy non-null value)
+        _kid = segment_df["KeywordId"].astype(str).where(
+            segment_df["KeywordId"].notna() & (segment_df["KeywordId"].astype(str).str.strip() != "") & (segment_df["KeywordId"].astype(str) != "nan"),
+            other=None,
+        ) if "KeywordId" in segment_df.columns else None
+        _tid = segment_df["TargetingId"].astype(str).where(
+            segment_df["TargetingId"].notna() & (segment_df["TargetingId"].astype(str).str.strip() != "") & (segment_df["TargetingId"].astype(str) != "nan"),
+            other=None,
+        ) if "TargetingId" in segment_df.columns else None
+
+        if _kid is not None and _tid is not None:
+            _group_raw = _kid.combine_first(_tid).combine_first(segment_df["_targeting_norm"])
+        elif _kid is not None:
+            _group_raw = _kid.combine_first(segment_df["_targeting_norm"])
+        elif _tid is not None:
+            _group_raw = _tid.combine_first(segment_df["_targeting_norm"])
+        else:
+            _group_raw = segment_df["_targeting_norm"]
+
+        segment_df["_group_key"] = _group_raw.astype(str).str.strip()
     else:
         # Fallback: use normalized targeting text
         segment_df["_group_key"] = segment_df["_targeting_norm"]
@@ -670,10 +720,12 @@ def _process_bucket(segment_df: pd.DataFrame, config: dict, bucket_name: str, un
         return new_bid, reason, action, intelligence_flags
     
     opt_results = grouped.apply(apply_optimization, axis=1)
-    grouped["New Bid"] = opt_results.apply(lambda x: x[0])
-    grouped["Reason"] = opt_results.apply(lambda x: x[1])
-    grouped["Decision_Basis"] = opt_results.apply(lambda x: x[2])
-    grouped["Intelligence_Flags"] = opt_results.apply(lambda x: ",".join(x[3]) if len(x) > 3 else "")
+    # Unpack tuple results in one pass — avoids four separate Series.apply() traversals
+    _new_bids, _reasons, _decisions, _flags = zip(*opt_results)
+    grouped["New Bid"] = list(_new_bids)
+    grouped["Reason"] = list(_reasons)
+    grouped["Decision_Basis"] = list(_decisions)
+    grouped["Intelligence_Flags"] = [",".join(f) if f else "" for f in _flags]
     grouped["Bucket"] = bucket_name
     
     # SYNC: Create recommendation objects for validation
