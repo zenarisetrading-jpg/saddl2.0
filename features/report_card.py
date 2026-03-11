@@ -1236,7 +1236,6 @@ class ReportCardModule(BaseFeature):
             if hasattr(st, "secrets"):
                 try:
                     api_key = st.secrets["OPENAI_API_KEY"]
-                    print(f"[AI INSIGHTS] API Key loaded from secrets: {api_key[:10]}..." if api_key else "[AI INSIGHTS] API Key is None")
                 except Exception as e:
                     print(f"[AI INSIGHTS] Failed to load API key from secrets: {e}")
 

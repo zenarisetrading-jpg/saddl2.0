@@ -106,21 +106,13 @@ class AuthService:
                 cur.close()
                 
                 if not row:
-                    print(f"LOGIN DEBUG: User '{email}' not found in database.")
                     return {"success": False, "error": "User not found"}
-                    
+
                 (uid, org_id, db_email, db_hash, role_str, billable, status, must_reset, pwd_updated) = row
-                
-                print(f"LOGIN DEBUG: User found. DB Hash length: {len(db_hash) if db_hash else 0}")
-                if db_hash:
-                     print(f"LOGIN DEBUG: DB Hash prefix: {db_hash[:7]}")
-                
+
                 # Verify Password
                 if not verify_password(password, db_hash):
-                    print("LOGIN DEBUG: Password verification failed.")
                     return {"success": False, "error": "Invalid password"}
-                
-                print("LOGIN DEBUG: Password verified successfully.")
 
                 # SEC-5: Org scoping — reject if caller supplied an org_id that doesn't match the DB row
                 if _expected_org_id and str(org_id) != str(_expected_org_id):
@@ -437,10 +429,6 @@ class AuthService:
         """
         Admin-assisted recovery.
         """
-        # Security: Prevent Admin from resetting Owner
-        if admin_user.role == Role.ADMIN:
-            pass 
-            
         import secrets as _secrets
         temp_password = _secrets.token_urlsafe(12) + 'Aa1!'
 
