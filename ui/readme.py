@@ -200,6 +200,9 @@ _GUIDES = [
     },
 ]
 
+_MATH: list = []
+_FAQ: list = []
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HTML BUILDERS
@@ -286,6 +289,7 @@ def _nav_item(article_id, icon, label):
     )
 
 
+@st.cache_data(show_spinner=False)
 def _build_html():
     # ── Sidebar nav ──────────────────────────────────────────────────────────
     nav_parts = ['<div class="nav-group-label">VIDEO TUTORIALS</div>']
