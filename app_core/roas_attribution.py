@@ -7,6 +7,7 @@ Used by both validation scripts and the Impact Dashboard.
 from datetime import date, timedelta
 from typing import Dict, Any, Optional
 import pandas as pd
+from utils.metrics import calculate_cvr
 
 
 def get_period_metrics(db, client_id: str, start_date: date, end_date: date) -> Optional[Dict[str, Any]]:
@@ -45,7 +46,7 @@ def get_period_metrics(db, client_id: str, start_date: date, end_date: date) -> 
                 'active_campaigns': active_campaigns,
                 'roas': sales / spend if spend > 0 else 0,
                 'cpc': spend / clicks if clicks > 0 else 0,
-                'cvr': orders / clicks if clicks > 0 else 0,
+                'cvr': calculate_cvr(orders, clicks) or 0,
                 'aov': sales / orders if orders > 0 else 0
             }
 

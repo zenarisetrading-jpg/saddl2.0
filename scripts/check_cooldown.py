@@ -1,7 +1,11 @@
 import os
+import sys
 import pandas as pd
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from app_core.constants import ACTION_MATURITY_DAYS
 
 def get_db_connection():
     load_dotenv()
@@ -14,7 +18,7 @@ def check_cooldown_violations():
     print("Checking for Cooldown Violations in actions_log...")
     engine = get_db_connection()
     
-    query = """
+    query = f"""
     WITH bid_changes AS (
         SELECT 
             client_id,
@@ -48,16 +52,16 @@ def check_cooldown_violations():
         new_value as final_bid
     FROM ordered_changes
     WHERE prev_action_date IS NOT NULL 
-      AND EXTRACT(EPOCH FROM (action_date - prev_action_date))/86400.0 < 14
+      AND EXTRACT(EPOCH FROM (action_date - prev_action_date))/86400.0 < {ACTION_MATURITY_DAYS}
     ORDER BY days_between ASC
     """
     
     df = pd.read_sql(query, engine)
     
     if df.empty:
-        print("No cooldown violations found! All BID_CHANGE actions are spaced by at least 14 days.")
+        print(f"No cooldown violations found! All BID_CHANGE actions are spaced by at least {ACTION_MATURITY_DAYS} days.")
     else:
-        print(f"Found {len(df)} instances where a target received multiple BID_CHANGE actions within 14 days.")
+        print(f"Found {len(df)} instances where a target received multiple BID_CHANGE actions within {ACTION_MATURITY_DAYS} days.")
         
         # Output summary by client
         summary = df.groupby('client_id').size().reset_index(name='violations_count')

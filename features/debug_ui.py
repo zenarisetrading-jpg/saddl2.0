@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 from app_core.db_manager import get_db_manager
+from app_core.constants import ACTION_MATURITY_DAYS
 
 def render_debug_metrics():
     """Render the debug diagnostics UI."""
@@ -188,8 +189,8 @@ def render_debug_metrics():
                         if days_after < 0:
                             st.error(f"❌ CRITICAL: Actions are {abs(days_after)} days AFTER performance data!")
                             st.error("**Solution**: Upload fresh Search Term Reports with data AFTER the action dates.")
-                        elif days_after < 14:
-                            st.warning(f"⚠️ Only {days_after} days of data after actions. Need 14+ days for 14D measurement.")
+                        elif days_after < ACTION_MATURITY_DAYS:
+                            st.warning(f"⚠️ Only {days_after} days of data after actions. Need {ACTION_MATURITY_DAYS}+ days for 14D measurement.")
                             st.info("**Solution**: Upload more recent Search Term Reports.")
                         else:
                             st.success(f"✅ {days_after} days available - sufficient for impact measurement!")
@@ -285,7 +286,7 @@ def render_debug_metrics():
             # Re-check all conditions for final verdict
             has_actions = action_count > 0
             has_stats = rows > 0
-            dates_ok = days_after >= 14 if latest_action and latest_stats else False
+            dates_ok = days_after >= ACTION_MATURITY_DAYS if latest_action and latest_stats else False
             camps_ok = matching > 0
 
             if has_actions and has_stats and dates_ok and camps_ok:

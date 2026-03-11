@@ -1626,6 +1626,7 @@ def _build_insights(
     organic_pct: Optional[float],
     cvr_delta: Optional[float],
 ) -> Dict[str, List[str]]:
+    """Returns TACoS as a percentage (0-100), not a ratio."""
     critical: List[str] = []
     growth: List[str] = []
     efficiency: List[str] = []

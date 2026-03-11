@@ -93,6 +93,13 @@ def _fmt_pct(v) -> str:
     return f"{float(v) * 100:.2f}%"
 
 
+def _fmt_pct_already(v) -> str:
+    """Format a value that is already in percentage scale (0-100), not a ratio."""
+    if v is None or (isinstance(v, float) and (pd.isna(v) or np.isnan(v))):
+        return "N/A"
+    return f"{float(v):.2f}%"
+
+
 def _fmt_number(v) -> str:
     if v is None or (isinstance(v, float) and (pd.isna(v) or np.isnan(v))):
         return "N/A"
@@ -438,7 +445,10 @@ def _filter_by_date(df: pd.DataFrame, window_days: int) -> pd.DataFrame:
 
 
 def _build_stats(df: pd.DataFrame, prev_df: pd.DataFrame) -> Dict[str, Any]:
-    """Aggregate totals and compute period-over-period deltas."""
+    """Aggregate totals and compute period-over-period deltas.
+
+    Returns ACoS as a percentage (0-100), not a ratio.
+    """
     def _totals(d):
         if d is None or d.empty:
             return dict(spend=0, sales=0, impressions=0, clicks=0, orders=0)
@@ -459,12 +469,14 @@ def _build_stats(df: pd.DataFrame, prev_df: pd.DataFrame) -> Dict[str, Any]:
         return (c - p) / p * 100
 
     roas = _safe_div(cur["spend"] and cur["sales"], cur["spend"])
-    acos = _safe_div(cur["spend"], cur["sales"])
+    _acos_ratio = _safe_div(cur["spend"], cur["sales"])
+    acos = (_acos_ratio * 100) if _acos_ratio is not None else None  # percentage (0-100)
     ctr  = _safe_div(cur["clicks"], cur["impressions"])
     cpc  = _safe_div(cur["spend"], cur["clicks"])
 
     p_roas = _safe_div(prv.get("sales", 0), prv.get("spend", 0) or 1)
-    p_acos = _safe_div(prv.get("spend", 0), prv.get("sales", 0) or 1)
+    _p_acos_ratio = _safe_div(prv.get("spend", 0), prv.get("sales", 0) or 1)
+    p_acos = (_p_acos_ratio * 100) if _p_acos_ratio is not None else None  # percentage (0-100)
     p_ctr  = _safe_div(prv.get("clicks", 0), prv.get("impressions", 0) or 1)
     p_cpc  = _safe_div(prv.get("spend", 0), prv.get("clicks", 0) or 1)
 
@@ -490,7 +502,10 @@ def _build_stats(df: pd.DataFrame, prev_df: pd.DataFrame) -> Dict[str, Any]:
 
 
 def _build_campaign_df(df: pd.DataFrame, target_roas: float) -> pd.DataFrame:
-    """Aggregate target_stats to campaign level with computed metrics."""
+    """Aggregate target_stats to campaign level with computed metrics.
+
+    Returns ACoS as a percentage (0-100), not a ratio.
+    """
     if df is None or df.empty:
         return pd.DataFrame()
 
@@ -505,7 +520,10 @@ def _build_campaign_df(df: pd.DataFrame, target_roas: float) -> pd.DataFrame:
     camp = df.groupby("campaign_name", as_index=False).agg(agg_cols)
     camp = camp[camp["spend"] > 0].copy()
     camp["roas"] = camp.apply(lambda r: _safe_div(r["sales"], r["spend"]), axis=1)
-    camp["acos"] = camp.apply(lambda r: _safe_div(r["spend"], r["sales"]), axis=1)
+    camp["acos"] = camp.apply(
+        lambda r: (_safe_div(r["spend"], r["sales"]) * 100) if _safe_div(r["spend"], r["sales"]) is not None else None,
+        axis=1,
+    )
     if "clicks" in camp.columns:
         camp["cpc"] = camp.apply(lambda r: _safe_div(r["spend"], r["clicks"]), axis=1)
 
@@ -588,7 +606,7 @@ def _render_health_strip(stats: Dict[str, Any]) -> None:
     cards = [
         ("Total Ad Spend",   _fmt_currency(stats["spend"]),          stats["d_spend"],       True),
         ("Blended ROAS",     _fmt_roas(stats["roas"]),                stats["d_roas"],        False),
-        ("ACOS",             _fmt_pct(stats["acos"]),                 stats["d_acos"],        True),
+        ("ACOS",             _fmt_pct_already(stats["acos"]),         stats["d_acos"],        True),
         ("Impressions",      _fmt_number(stats["impressions"]),       stats["d_impressions"], False),
         ("CTR",              _fmt_pct(stats["ctr"]),                  stats["d_ctr"],         False),
         ("Avg. CPC",         _fmt_currency(stats["cpc"]),             stats["d_cpc"],         True),
@@ -636,7 +654,7 @@ def _render_campaign_table(
             <td>{_fmt_currency(row['spend'])}</td>
             <td style="color:#34D399">{_fmt_currency(row['sales'])}</td>
             <td>{_roas_badge(row['roas'], target_roas)}</td>
-            <td>{_fmt_pct(row['acos'])}</td>
+            <td>{_fmt_pct_already(row['acos'])}</td>
             <td style="color:#6B7280">{_fmt_number(row.get('impressions', 0))}</td>
             <td style="color:#6B7280">{cpc_val}</td>
         </tr>

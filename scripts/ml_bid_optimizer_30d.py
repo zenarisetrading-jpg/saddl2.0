@@ -1,4 +1,5 @@
 import os
+import sys
 import pandas as pd
 import numpy as np
 import lightgbm as lgb
@@ -10,6 +11,9 @@ from datetime import timedelta
 from dotenv import load_dotenv
 import warnings
 warnings.filterwarnings('ignore')
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from app_core.constants import ACTION_MATURITY_DAYS
 
 def get_db_connection():
     # Load .env from the current directory
@@ -80,8 +84,8 @@ def build_training_dataset(actions_df, stats_df):
         key = f"{row['client_id']}|{row['campaign_name']}|{row['ad_group_name']}|{row['target_text']}"
         action_date = row['action_date']
         
-        # 14-day pre/post windows
-        pre_start = action_date - timedelta(days=14)
+        # ACTION_MATURITY_DAYS pre/post windows
+        pre_start = action_date - timedelta(days=ACTION_MATURITY_DAYS)
         pre_end = action_date - timedelta(days=1)
         post_start = action_date
         post_end = action_date + timedelta(days=29)
@@ -100,13 +104,14 @@ def build_training_dataset(actions_df, stats_df):
             
         # Aggregate stats
         def aggregate_metrics(df_window):
+            """Returns ACoS as a percentage (0-100), not a ratio."""
             clicks = df_window['clicks'].sum()
             spend = df_window['spend'].sum()
             sales = df_window['sales'].sum()
             orders = df_window['orders'].sum()
             impressions = df_window['impressions'].sum()
             days = len(df_window)
-            
+
             return {
                 'clicks': clicks,
                 'spend': spend,
@@ -114,7 +119,7 @@ def build_training_dataset(actions_df, stats_df):
                 'orders': orders,
                 'impressions': impressions,
                 'days': days,
-                'acos': spend / sales if sales > 0 else 0,
+                'acos': (spend / sales * 100) if sales > 0 else 0,
                 'roas': sales / spend if spend > 0 else 0,
                 'cvr': orders / clicks if clicks > 0 else 0,
                 'ctr': clicks / impressions if impressions > 0 else 0,

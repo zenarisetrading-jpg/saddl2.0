@@ -72,6 +72,17 @@ def calculate_ppc_metrics(
     return df
 
 
+def calculate_cvr(orders: float, clicks: float):
+    """
+    Conversion rate = orders / clicks.
+    Returns None if clicks is 0 or None to avoid division by zero.
+    Returns as a ratio (0-1), multiply by 100 for display percentage.
+    """
+    if not clicks:
+        return None
+    return orders / clicks
+
+
 def ensure_numeric_columns(
     df: pd.DataFrame,
     columns: list = None,

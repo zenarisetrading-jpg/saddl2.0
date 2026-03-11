@@ -47,13 +47,15 @@ def score_to_color(score: float) -> str:
 
 def generate_deterministic_briefing(metrics: Dict[str, Any]) -> str:
     """
+    Returns TACoS as a percentage (0-100), not a ratio.
+
     Build a 2-3 sentence intelligence briefing from template logic only.
     No LLM call — always fast and deterministic.
 
     Expected keys in *metrics*:
         health_score            float  0-100
-        tacos_current           float | None   e.g. 0.082
-        target_tacos            float          e.g. 0.10
+        tacos_current           float | None   e.g. 8.2  (percentage, not ratio)
+        target_tacos            float          e.g. 15.0 (percentage, not ratio)
         revenue_30d             float
         organic_share_pct       float | None   e.g. 42.0  (percentage, not ratio)
         attributed_impact       float          attributed AED from optimizer actions
@@ -62,7 +64,7 @@ def generate_deterministic_briefing(metrics: Dict[str, Any]) -> str:
     """
     score         = float(metrics.get("health_score") or 0)
     tacos         = metrics.get("tacos_current")
-    target_tacos  = float(metrics.get("target_tacos") or 0.10)
+    target_tacos  = float(metrics.get("target_tacos") or 10.0)
     revenue_30d   = float(metrics.get("revenue_30d") or 0)
     organic_pct   = metrics.get("organic_share_pct")
     attributed    = float(metrics.get("attributed_impact") or 0)
@@ -86,12 +88,12 @@ def generate_deterministic_briefing(metrics: Dict[str, Any]) -> str:
         diff_pct = (tacos - target_tacos) / target_tacos * 100
         if diff_pct > 10:
             parts.append(
-                f"TACOS is running at {tacos * 100:.1f}% against a {target_tacos * 100:.1f}% target — "
+                f"TACOS is running at {tacos:.1f}% against a {target_tacos:.1f}% target — "
                 f"reducing ad spend as a share of revenue is the primary opportunity."
             )
         elif diff_pct < -10:
             parts.append(
-                f"TACOS is healthy at {tacos * 100:.1f}% vs {target_tacos * 100:.1f}% target — "
+                f"TACOS is healthy at {tacos:.1f}% vs {target_tacos:.1f}% target — "
                 f"efficiency headroom may support more aggressive growth investment."
             )
         elif organic_pct is not None:
@@ -130,12 +132,14 @@ def generate_deterministic_briefing(metrics: Dict[str, Any]) -> str:
 
 def format_llm_context(metrics: Dict[str, Any]) -> str:
     """
+    Returns TACoS as a percentage (0-100), not a ratio.
+
     Format a metrics dict into a structured plain-text block for an LLM prompt.
     """
     score         = float(metrics.get("health_score") or 0)
     label         = score_to_label(score)
     tacos         = metrics.get("tacos_current")
-    target_tacos  = float(metrics.get("target_tacos") or 0.10)
+    target_tacos  = float(metrics.get("target_tacos") or 10.0)
     revenue_30d   = float(metrics.get("revenue_30d") or 0)
     revenue_prev  = float(metrics.get("revenue_prev_30d") or 0)
     organic_pct   = metrics.get("organic_share_pct")
@@ -159,7 +163,7 @@ def format_llm_context(metrics: Dict[str, Any]) -> str:
         lines.append(f"REVENUE PREV 30D: {currency} {revenue_prev:,.0f} ({delta_pct:+.1f}%)")
 
     if tacos is not None:
-        lines.append(f"TACOS: {tacos * 100:.2f}%  (target: {target_tacos * 100:.1f}%)")
+        lines.append(f"TACOS: {tacos:.2f}%  (target: {target_tacos:.1f}%)")
 
     if organic_pct is not None:
         lines.append(f"ORGANIC REVENUE SHARE: {organic_pct:.1f}%")

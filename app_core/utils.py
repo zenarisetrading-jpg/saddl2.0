@@ -6,18 +6,19 @@ Shared logic and constants used across multiple features (Impact, Executive, Rep
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any
+from app_core.constants import ACTION_MATURITY_DAYS
 
 # ==========================================
 # MULTI-HORIZON IMPACT MEASUREMENT CONFIG
 # ==========================================
 IMPACT_WINDOWS = {
-    "before_window_days": 14,       # Fixed 14-day baseline for all horizons
+    "before_window_days": ACTION_MATURITY_DAYS,       # Fixed 14-day baseline for all horizons
     "maturity_buffer_days": 3,      # Days after window for attribution to settle
-    
+
     "horizons": {
         "14D": {
-            "days": 14,
-            "maturity": 17,  # 14 + 3
+            "days": ACTION_MATURITY_DAYS,
+            "maturity": ACTION_MATURITY_DAYS + 3,  # ACTION_MATURITY_DAYS + 3
             "label": "14-Day Impact",
         },
         "30D": {

@@ -233,6 +233,7 @@ def _fetch_optimizer_stats_cached(client_id: str) -> dict:
         pending_count   int   — actions within the last 14 days (window not yet mature)
     """
     from app_core.db_manager import get_db_manager
+    from app_core.constants import ACTION_MATURITY_DAYS
     from datetime import date, timedelta
 
     empty = {"total_actions": 0, "last_run_date": None, "pending_count": 0}
@@ -241,7 +242,7 @@ def _fetch_optimizer_stats_cached(client_id: str) -> dict:
     if not db or not client_id:
         return empty
 
-    cutoff = str(date.today() - timedelta(days=14))
+    cutoff = str(date.today() - timedelta(days=ACTION_MATURITY_DAYS))
     try:
         with db._get_connection() as conn:
             cur = conn.cursor()
@@ -364,6 +365,7 @@ def render_sidebar(navigate_to):
     return st.session_state.get('current_module', 'home')
 
 def render_home():  # noqa: C901 – intentionally large view function
+    """Returns TACoS as a percentage (0-100), not a ratio."""
     """
     Phase 3 Homepage — three-section layout:
       Section 1  Account Pulse   (top bar with name, health score, top driver)
@@ -477,8 +479,8 @@ def render_home():  # noqa: C901 – intentionally large view function
     units_cur     = pillar.get("units_current")
     units_prv     = pillar.get("units_prev")
 
-    # TACOS: always ad_spend / total_revenue  → decimal (e.g. 0.153 for 15.3 %)
-    tacos_current = (ad_spend / total_sales) if (total_sales and ad_spend) else None
+    # TACOS: ad_spend / total_revenue → percentage (0-100), e.g. 15.3 for 15.3%
+    tacos_current = (ad_spend / total_sales * 100) if (total_sales and ad_spend) else None
 
     tacos_score   = score_against_target_lower_better(tacos_current, target_tacos)
 
@@ -522,7 +524,7 @@ def render_home():  # noqa: C901 – intentionally large view function
 
         if worst_key == "tacos_vs_target" and tacos_current is not None:
             top_driver = (
-                f"TACOS at {tacos_current*100:.1f}% vs {target_tacos*100:.0f}% target "
+                f"TACOS at {tacos_current:.1f}% vs {target_tacos:.0f}% target "
                 f"\u2014 {worst_gap:.0f}-pt gap"
             )
         elif worst_key == "organic_paid_ratio" and organic_ratio is not None:
@@ -600,8 +602,8 @@ def render_home():  # noqa: C901 – intentionally large view function
     last_refresh  = pillar.get("last_refresh_date")
     refresh_str   = f"Last refresh: {last_refresh}" if last_refresh else "No data yet"
     rev_str       = f"{total_sales:,.0f}"           if total_sales          else "\u2014"
-    tacos_val     = f"{tacos_current*100:.1f}%"     if tacos_current is not None else "\u2014"
-    tacos_tgt_str = f"{target_tacos*100:.0f}%"
+    tacos_val     = f"{tacos_current:.1f}%"          if tacos_current is not None else "\u2014"
+    tacos_tgt_str = f"{target_tacos:.0f}%"
     org_str       = f"{organic_pct:.1f}%"           if organic_pct is not None else "\u2014"
     total_act_str = f"{opt_data.get('total_actions', 0):,}"
     last_run_str  = opt_data.get("last_run_date") or "Never"

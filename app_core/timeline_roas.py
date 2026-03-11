@@ -12,6 +12,7 @@ This provides clearer storytelling than aggregating overlapping action windows.
 from typing import Dict, Any, Optional
 from datetime import date, datetime, timedelta
 import pandas as pd
+from app_core.constants import ACTION_MATURITY_DAYS
 
 
 def get_account_timeline_roas(
@@ -48,7 +49,7 @@ def get_account_timeline_roas(
     # =====================================================
     # STEP 2: Find Latest Action with COMPLETE 30-Day Window (for Final)
     # =====================================================
-    # CRITICAL: We need 44 days after the action (14 days to mature + 30 days to measure)
+    # CRITICAL: We need ACTION_MATURITY_DAYS + 30 days after the action (14 days to mature + 30 days to measure)
     # Find the latest mature action that has a COMPLETE 30-day window available
 
     latest_data = postgres_manager.get_latest_data_date(client_id)
@@ -72,7 +73,7 @@ def get_account_timeline_roas(
         # Find the latest action with a complete 30-day window
         for _, action in mature_non_drag.iterrows():
             action_date = action['action_date_dt'].date()
-            window_end = action_date + timedelta(days=44)  # 14 days to mature + 30 days to measure
+            window_end = action_date + timedelta(days=ACTION_MATURITY_DAYS + 30)  # ACTION_MATURITY_DAYS to mature + 30 days to measure
 
             if window_end <= data_end:
                 # This action has a complete 30-day window!
@@ -90,7 +91,7 @@ def get_account_timeline_roas(
 
             for _, action in mature_any.iterrows():
                 action_date = action['action_date_dt'].date()
-                window_end = action_date + timedelta(days=44)
+                window_end = action_date + timedelta(days=ACTION_MATURITY_DAYS + 30)
 
                 if window_end <= data_end:
                     latest_measurable = action_date
@@ -110,7 +111,7 @@ def get_account_timeline_roas(
     # =====================================================
     # STEP 3: Define 30-Day Baseline Period
     # =====================================================
-    baseline_end = earliest_action - timedelta(days=14)  # 14-day buffer before first action
+    baseline_end = earliest_action - timedelta(days=ACTION_MATURITY_DAYS)  # ACTION_MATURITY_DAYS buffer before first action
     baseline_start = baseline_end - timedelta(days=30)   # 30-day period
 
     # Edge Case 1: Not enough historical data
@@ -128,7 +129,7 @@ def get_account_timeline_roas(
     # STEP 4: Define 30-Day Final Period (ALWAYS COMPLETE)
     # =====================================================
     # Since we found a mature action with complete 30-day window, use it
-    final_start = latest_measurable + timedelta(days=14)  # 14 days after action for maturity
+    final_start = latest_measurable + timedelta(days=ACTION_MATURITY_DAYS)  # ACTION_MATURITY_DAYS after action for maturity
     final_end = final_start + timedelta(days=30)          # ALWAYS 30 days
 
     # No need to check data availability - we already verified in STEP 2
