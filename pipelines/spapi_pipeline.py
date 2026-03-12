@@ -64,14 +64,15 @@ def build_sales_traffic_query(start_date: str, end_date: str, marketplace_id: st
 
 
 def create_data_kiosk_query(
-    access_token: str, query_body: str, region_endpoint: Optional[str] = None
+    access_token: str, query_body: str, region_endpoint: Optional[str] = None,
+    lwa_refresh_token: Optional[str] = None,
 ) -> str:
-    settings = get_settings(region_endpoint=region_endpoint)
+    settings = get_settings(region_endpoint=region_endpoint, lwa_refresh_token=lwa_refresh_token)
     url = f"{settings.endpoint}/dataKiosk/2023-11-15/queries"
     response = requests.post(
         url,
         headers=make_headers(access_token),
-        auth=get_auth(),
+        auth=get_auth(lwa_refresh_token=lwa_refresh_token),
         data=query_body,
         timeout=60,
     )
@@ -87,13 +88,14 @@ def poll_query_status(
     poll_seconds: int = 60,
     max_wait_minutes: int = 60,
     region_endpoint: Optional[str] = None,
+    lwa_refresh_token: Optional[str] = None,
 ) -> Dict:
-    settings = get_settings(region_endpoint=region_endpoint)
+    settings = get_settings(region_endpoint=region_endpoint, lwa_refresh_token=lwa_refresh_token)
     url = f"{settings.endpoint}/dataKiosk/2023-11-15/queries/{query_id}"
     max_polls = max_wait_minutes * 60 // poll_seconds
 
     for attempt in range(int(max_polls) + 1):
-        response = requests.get(url, headers=make_headers(access_token), auth=get_auth(), timeout=60)
+        response = requests.get(url, headers=make_headers(access_token), auth=get_auth(lwa_refresh_token=lwa_refresh_token), timeout=60)
         response.raise_for_status()
         payload = response.json()
         status = payload.get("processingStatus")
@@ -110,11 +112,12 @@ def poll_query_status(
 
 
 def download_query_document(
-    access_token: str, data_document_id: str, region_endpoint: Optional[str] = None
+    access_token: str, data_document_id: str, region_endpoint: Optional[str] = None,
+    lwa_refresh_token: Optional[str] = None,
 ) -> List[Dict]:
-    settings = get_settings(region_endpoint=region_endpoint)
+    settings = get_settings(region_endpoint=region_endpoint, lwa_refresh_token=lwa_refresh_token)
     url = f"{settings.endpoint}/dataKiosk/2023-11-15/documents/{data_document_id}"
-    response = requests.get(url, headers=make_headers(access_token), auth=get_auth(), timeout=60)
+    response = requests.get(url, headers=make_headers(access_token), auth=get_auth(lwa_refresh_token=lwa_refresh_token), timeout=60)
     response.raise_for_status()
     document_url = response.json()["documentUrl"]
 
@@ -325,7 +328,7 @@ def pull_fba_inventory(
             lwa_refresh_token=lwa_refresh_token,
         )
         access_token = get_token(settings=settings, force_refresh=True)
-        auth = get_auth()
+        auth = get_auth(lwa_refresh_token=lwa_refresh_token)
 
         print(f"Step 1: Fetching FBA inventory summaries for {client_id}...")
         parsed_rows: List[Dict] = []

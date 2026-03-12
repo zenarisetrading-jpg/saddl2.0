@@ -196,7 +196,7 @@ def _run_backfill_for(
                         time.sleep(62 - elapsed)
 
                 qbody          = build_sales_traffic_query(day_str, day_str, settings.marketplace_id)
-                qid            = create_data_kiosk_query(access_token, qbody, region_endpoint=region_endpoint)
+                qid            = create_data_kiosk_query(access_token, qbody, region_endpoint=region_endpoint, lwa_refresh_token=refresh_token)
                 last_submit_ts = time.time()
 
                 # Poll with 10s intervals (Amazon resolves most queries in < 2 min)
@@ -204,10 +204,11 @@ def _run_backfill_for(
                     access_token, qid,
                     poll_seconds=10, max_wait_minutes=30,
                     region_endpoint=region_endpoint,
+                    lwa_refresh_token=refresh_token,
                 )
                 doc_id = payload.get("dataDocumentId")
                 if doc_id:
-                    records  = download_query_document(access_token, doc_id, region_endpoint=region_endpoint)
+                    records  = download_query_document(access_token, doc_id, region_endpoint=region_endpoint, lwa_refresh_token=refresh_token)
                     day_rows = upsert_sales_traffic(records, day_str, settings.marketplace_id, account_id=client_id)
                     rows_sc += day_rows
                     days_done += 1

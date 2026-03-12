@@ -117,9 +117,9 @@ def get_token(force_refresh: bool = False, settings: Optional[SPAPISettings] = N
     return access_token
 
 
-def get_auth() -> AWS4Auth:
+def get_auth(lwa_refresh_token: Optional[str] = None) -> AWS4Auth:
     """Build AWS4Auth helper for SP-API requests."""
-    settings = get_settings()
+    settings = get_settings(lwa_refresh_token=lwa_refresh_token)
     return AWS4Auth(
         settings.aws_access_key_id,
         settings.aws_secret_access_key,
