@@ -258,6 +258,7 @@ def _run_backfill_for(
             client_id,
             marketplace_id=settings.marketplace_id,
             region_endpoint=region_endpoint,
+            lwa_refresh_token=refresh_token,
         )
         log.info("  [3/4] ✓ %s rows written", rows_inv)
 

@@ -308,6 +308,7 @@ def pull_fba_inventory(
     client_id: str,
     marketplace_id: Optional[str] = None,
     region_endpoint: Optional[str] = None,
+    lwa_refresh_token: Optional[str] = None,
 ) -> Optional[int]:
     def _as_int(value: Optional[str]) -> Optional[int]:
         if value in (None, ""):
@@ -318,8 +319,12 @@ def pull_fba_inventory(
             return None
 
     try:
-        settings = get_settings(marketplace_id=marketplace_id, region_endpoint=region_endpoint)
-        access_token = get_token(force_refresh=True)
+        settings = get_settings(
+            marketplace_id=marketplace_id,
+            region_endpoint=region_endpoint,
+            lwa_refresh_token=lwa_refresh_token,
+        )
+        access_token = get_token(settings=settings, force_refresh=True)
         auth = get_auth()
 
         print(f"Step 1: Fetching FBA inventory summaries for {client_id}...")
