@@ -245,11 +245,11 @@ def _run_for_account(account: dict, target_dates: list[str]) -> dict:
                 cfg = {
                     "lwa_client_id":     os.getenv("LWA_CLIENT_ID", ""),
                     "lwa_client_secret": os.getenv("LWA_CLIENT_SECRET", ""),
-                    "refresh_token_uae": refresh_token,
+                    "refresh_token":     refresh_token,
                     "aws_access_key":    os.getenv("AWS_ACCESS_KEY_ID", ""),
                     "aws_secret_key":    os.getenv("AWS_SECRET_ACCESS_KEY", ""),
                     "aws_region":        os.getenv("AWS_REGION", "eu-west-1"),
-                    "marketplace_uae":   settings.marketplace_id,
+                    "marketplace_id":    settings.marketplace_id,
                     "spapi_account_id":  client_id,
                     "endpoint":          f"https://{region_endpoint}",
                     "database_url":      db_url,
