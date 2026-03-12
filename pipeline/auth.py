@@ -11,7 +11,7 @@ def get_token(config: dict) -> str:
         "https://api.amazon.com/auth/o2/token",
         data={
             "grant_type": "refresh_token",
-            "refresh_token": config["refresh_token_uae"],
+            "refresh_token": config["refresh_token"],
             "client_id": config["lwa_client_id"],
             "client_secret": config["lwa_client_secret"],
         },

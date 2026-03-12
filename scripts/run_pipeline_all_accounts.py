@@ -141,6 +141,19 @@ def _run_for_account(account: dict, target_dates: list[str]) -> dict:
         try:
             settings     = get_settings()
             access_token = get_token(force_refresh=True)
+        except Exception as auth_err:
+            err_str = str(auth_err)
+            if "403" in err_str or "Forbidden" in err_str or "Unauthorized" in err_str:
+                msg = (
+                    f"{client_id} SP-API authorization failed — "
+                    f"refresh token may need reauthorization. Detail: {auth_err}"
+                )
+                log.error("  [AUTH] %s", msg)
+            else:
+                msg = f"SP-API token refresh failed: {auth_err}"
+                log.error("  [AUTH] %s: %s", client_id, auth_err)
+            result["errors"].append(msg)
+            return result
         finally:
             # Restore marketplace env vars
             if prev_marketplace is not None:
@@ -307,24 +320,50 @@ def main() -> None:
             log.info("   Waiting 65s between accounts (Data Kiosk rate limit)…")
             time.sleep(65)
 
-        result = _run_for_account(account, target_dates)
+        try:
+            result = _run_for_account(account, target_dates)
+        except Exception as exc:
+            log.error("  ✖ [%s] Unhandled error — account skipped: %s", account["client_id"], exc)
+            result = {
+                "client_id":  account["client_id"],
+                "sales_rows": 0,
+                "fba_rows":   0,
+                "bsr_rows":   0,
+                "errors":     [str(exc)],
+                "crashed":    True,
+            }
         all_results.append(result)
 
     # ── Summary ───────────────────────────────────────────────────────────────
     log.info("")
     log.info("═══════════════ SUMMARY (%s) ════════════════", target_dates[0])
-    any_error = False
     for r in all_results:
-        status = "✅" if not r["errors"] else "⚠️"
+        if r.get("crashed"):
+            status = "✖ "
+        elif r["errors"]:
+            status = "⚠️ "
+        else:
+            status = "✅ "
         log.info("  %s %-20s  sales=%d  fba=%d  bsr=%d%s",
                  status, r["client_id"], r["sales_rows"], r["fba_rows"], r["bsr_rows"],
                  f"  errors={r['errors']}" if r["errors"] else "")
-        if r["errors"]:
-            any_error = True
     log.info("═══════════════════════════════════════════════")
 
-    # Exit 1 if any account had errors so GitHub Actions marks the run as failed
-    sys.exit(1 if any_error else 0)
+    # An account "completed" if _run_for_account returned (no hard crash).
+    # Even partial errors (some steps failed) count — the runner did useful work.
+    # Exit 1 only when every single account crashed without returning a result.
+    completed_accounts = [r for r in all_results if not r.get("crashed")]
+    if not completed_accounts:
+        log.error("All %d account(s) failed completely — exiting with code 1", len(all_results))
+        sys.exit(1)
+
+    n_failed = sum(1 for r in all_results if r.get("crashed") or r["errors"])
+    if n_failed:
+        log.warning(
+            "%d/%d account(s) had errors (see above); %d completed — exiting with code 0",
+            n_failed, len(all_results), len(completed_accounts),
+        )
+    sys.exit(0)
 
 
 if __name__ == "__main__":

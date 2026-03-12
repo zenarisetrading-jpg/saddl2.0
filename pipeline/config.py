@@ -43,11 +43,11 @@ def get_config() -> Dict[str, str]:
     return {
         "lwa_client_id": os.environ["LWA_CLIENT_ID"].strip(),
         "lwa_client_secret": os.environ["LWA_CLIENT_SECRET"].strip(),
-        "refresh_token_uae": os.environ["LWA_REFRESH_TOKEN_UAE"].strip(),
+        "refresh_token": os.environ["LWA_REFRESH_TOKEN_UAE"].strip(),
         "aws_access_key": os.environ["AWS_ACCESS_KEY_ID"].strip(),
         "aws_secret_key": os.environ["AWS_SECRET_ACCESS_KEY"].strip(),
         "aws_region": os.environ.get("AWS_REGION", "eu-west-1").strip(),
-        "marketplace_uae": marketplace_id,
+        "marketplace_id": marketplace_id,
         "spapi_account_id": spapi_account_id,
         "ad_client_id": ad_client_id,
         "database_url": database_url,

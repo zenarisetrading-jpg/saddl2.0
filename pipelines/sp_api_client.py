@@ -77,8 +77,12 @@ def get_settings(
     )
 
 
-def get_token(force_refresh: bool = False) -> str:
-    """Get LWA access token and cache it until 5 minutes before expiry."""
+def get_token(force_refresh: bool = False, settings: Optional[SPAPISettings] = None) -> str:
+    """Get LWA access token and cache it until 5 minutes before expiry.
+
+    Pass ``settings`` explicitly (e.g. from _run_backfill_for) to avoid
+    falling back to env-var resolution and the LWA_REFRESH_TOKEN_UAE requirement.
+    """
     now = datetime.now(timezone.utc)
     cached_token = _token_cache.get("access_token")
     cached_expiry = _token_cache.get("expires_at")
@@ -91,14 +95,14 @@ def get_token(force_refresh: bool = False) -> str:
     ):
         return cached_token
 
-    settings = get_settings()
+    resolved_settings = settings or get_settings()
     response = requests.post(
         "https://api.amazon.com/auth/o2/token",
         data={
             "grant_type": "refresh_token",
-            "refresh_token": settings.lwa_refresh_token,
-            "client_id": settings.lwa_client_id,
-            "client_secret": settings.lwa_client_secret,
+            "refresh_token": resolved_settings.lwa_refresh_token,
+            "client_id": resolved_settings.lwa_client_id,
+            "client_secret": resolved_settings.lwa_client_secret,
         },
         timeout=30,
     )

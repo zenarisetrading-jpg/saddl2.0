@@ -547,7 +547,7 @@ def fetch_business_overview_data(
 
     def _run_target():
         try:
-            df = db.get_target_stats_df(client_id, start_date=prev_start)
+            df = db.get_target_stats_daily_totals(client_id, start_date=prev_start)
             return df if df is not None else pd.DataFrame()
         except Exception:
             return pd.DataFrame()

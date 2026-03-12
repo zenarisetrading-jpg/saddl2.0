@@ -316,7 +316,7 @@ class PostgresManager:
     
     # Bump this string whenever you add a new table or column to _init_schema.
     # Any running instance will detect the version mismatch and re-run the DDL.
-    _SCHEMA_VERSION = "v9"
+    _SCHEMA_VERSION = "v10"  # added idx_apc_client_id + idx_apc_client_lower
 
     def _schema_is_current(self) -> bool:
         """Return True if the DB already has the expected schema version.
@@ -468,6 +468,17 @@ class PostgresManager:
                     )
                 """)
                 
+                # Indexes for LOWER()-based JOIN in product_q CTE (business overview)
+                # Without these, every row in raw_search_term_data triggers a full APC scan.
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_apc_client_id
+                    ON advertised_product_cache (client_id)
+                """)
+                cursor.execute("""
+                    CREATE INDEX IF NOT EXISTS idx_apc_client_lower
+                    ON advertised_product_cache (client_id, LOWER(campaign_name), LOWER(ad_group_name))
+                """)
+
                 # Dynamic Lifecycle Updates (V2.1)
                 try:
                     cursor.execute("ALTER TABLE advertised_product_cache ADD COLUMN IF NOT EXISTS product_lifecycle TEXT DEFAULT 'mature'")
@@ -1339,8 +1350,44 @@ class PostgresManager:
 
         PostgresManager._ts_cache[cache_key] = (_time.time(), df)
         return df
-    
-            
+
+    @retry_on_connection_error()
+    def get_target_stats_daily_totals(self, client_id: str, start_date) -> pd.DataFrame:
+        """Returns daily aggregated Spend and Sales for a client.
+
+        Lightweight version of get_target_stats_df() for dashboard use.
+        Returns one row per start_date instead of one row per keyword per date.
+        """
+        import time as _time
+
+        if not hasattr(PostgresManager, '_tsdt_cache'):
+            PostgresManager._tsdt_cache = {}
+        cache_key = f"{client_id}|{start_date}"
+        cached = PostgresManager._tsdt_cache.get(cache_key)
+        if cached:
+            ts, df = cached
+            if _time.time() - ts < 300:
+                return df
+
+        query = """
+            SELECT
+                start_date        AS "Date",
+                SUM(spend)        AS "Spend",
+                SUM(sales)        AS "Sales"
+            FROM target_stats
+            WHERE client_id = %s
+              AND start_date >= %s
+            GROUP BY start_date
+            ORDER BY start_date DESC
+        """
+        with self._get_connection() as conn:
+            df = pd.read_sql(query, conn, params=(client_id, start_date))
+            if not df.empty and 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'])
+
+        PostgresManager._tsdt_cache[cache_key] = (_time.time(), df)
+        return df
+
     def get_stats_by_date_range(self, start_date: date, end_date: date, client_id: Optional[str] = None) -> List[Dict[str, Any]]:
         with self._get_connection() as conn:
             with conn.cursor(cursor_factory=RealDictCursor) as cursor:

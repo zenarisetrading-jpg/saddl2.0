@@ -108,7 +108,7 @@ def fetch_single_asin_bsr(config: dict, token: str, asin: str, report_date: str)
         headers=make_headers(token),
         auth=get_auth(config),
         params={
-            "marketplaceIds": config["marketplace_uae"],
+            "marketplaceIds": config["marketplace_id"],
             "includedData": "salesRanks",
         },
         timeout=60,
@@ -116,7 +116,7 @@ def fetch_single_asin_bsr(config: dict, token: str, asin: str, report_date: str)
     payload = response.json()
     return _extract_sales_rank_rows(
         payload,
-        config["marketplace_uae"],
+        config["marketplace_id"],
         config["spapi_account_id"],
         asin,
         report_date,
@@ -234,7 +234,7 @@ def pull_daily_bsr(report_date: str, config: Optional[dict] = None, asins: Optio
     write_db_url = _get_write_db_url(cfg)
     target_asins = asins or get_active_asins(
         write_db_url,
-        cfg["marketplace_uae"],
+        cfg["marketplace_id"],
         cfg["spapi_account_id"],
         report_date,
     )
@@ -278,7 +278,7 @@ def backfill_bsr(start_date: str, end_date: str, config: Optional[dict] = None) 
         try:
             asins = get_active_asins(
                 read_db_url,
-                cfg["marketplace_uae"],
+                cfg["marketplace_id"],
                 cfg["spapi_account_id"],
                 report_date,
             )

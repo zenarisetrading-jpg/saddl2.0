@@ -149,7 +149,7 @@ def _run_backfill_for(
             marketplace_id=marketplace_id, region_endpoint=region_endpoint,
             lwa_refresh_token=refresh_token,
         )
-        access_token = get_token(force_refresh=True)
+        access_token = get_token(settings=settings, force_refresh=True)
         today        = date.today()
         start_dt     = (today - timedelta(days=BACKFILL_DAYS)).strftime("%Y-%m-%d")
         end_dt       = (today - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -280,11 +280,11 @@ def _run_backfill_for(
                 cfg = {
                     "lwa_client_id":     os.getenv("LWA_CLIENT_ID", ""),
                     "lwa_client_secret": os.getenv("LWA_CLIENT_SECRET", ""),
-                    "refresh_token_uae": refresh_token,
+                    "refresh_token": refresh_token,
                     "aws_access_key":    os.getenv("AWS_ACCESS_KEY_ID", ""),
                     "aws_secret_key":    os.getenv("AWS_SECRET_ACCESS_KEY", ""),
                     "aws_region":        os.getenv("AWS_REGION", "eu-west-1"),
-                    "marketplace_uae":   settings.marketplace_id,
+                    "marketplace_id":    settings.marketplace_id,
                     "spapi_account_id":  client_id,
                     "endpoint":          f"https://{region_endpoint}" if region_endpoint else "https://sellingpartnerapi-eu.amazon.com",
                     "database_url":      db_url,
