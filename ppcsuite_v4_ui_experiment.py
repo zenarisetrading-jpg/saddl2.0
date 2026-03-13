@@ -1,11 +1,4 @@
 import streamlit as st
-
-st.markdown(
-    '<meta http-equiv="refresh" content="0; url=https://dashboard.saddl.io">',
-    unsafe_allow_html=True,
-)
-st.stop()
-
 import sys
 import os
 from pathlib import Path
