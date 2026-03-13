@@ -111,6 +111,8 @@ def _run_backfill_for(
     refresh_token: str,
     marketplace_id: Optional[str] = None,
     region_endpoint: Optional[str] = None,
+    lwa_client_id: Optional[str] = None,
+    lwa_client_secret: Optional[str] = None,
 ) -> None:
     """Run the full backfill for one client. Mirrors _backfill_thread_fn in data_hub.py."""
     from datetime import date, timedelta
@@ -148,6 +150,8 @@ def _run_backfill_for(
         settings     = get_settings(
             marketplace_id=marketplace_id, region_endpoint=region_endpoint,
             lwa_refresh_token=refresh_token,
+            lwa_client_id=lwa_client_id,
+            lwa_client_secret=lwa_client_secret,
         )
         access_token = get_token(settings=settings, force_refresh=True)
         today        = date.today()
@@ -391,10 +395,23 @@ def main() -> None:
     except ImportError:
         pass
 
+    # Validate app-level SP-API credentials at startup so the error surfaces
+    # immediately and clearly rather than buried inside per-account backfill logs.
+    lwa_client_id     = os.getenv("LWA_CLIENT_ID", "").strip()
+    lwa_client_secret = os.getenv("LWA_CLIENT_SECRET", "").strip()
+    missing = [name for name, val in [
+        ("LWA_CLIENT_ID",     lwa_client_id),
+        ("LWA_CLIENT_SECRET", lwa_client_secret),
+        ("DATABASE_URL",      os.getenv("DATABASE_URL", "")),
+    ] if not val]
+    if missing:
+        sys.exit(f"❌  Missing required env var(s): {', '.join(missing)}")
+
     log.info("═══════════════════════════════════════════")
     log.info("Saddle Backfill Worker started")
     log.info("Poll interval : %ds", POLL_INTERVAL_SECONDS)
     log.info("Backfill window: %d days", BACKFILL_DAYS)
+    log.info("LWA_CLIENT_ID  : %s…", lwa_client_id[:12])
     log.info("═══════════════════════════════════════════")
 
     while True:
@@ -408,6 +425,8 @@ def main() -> None:
                         client["refresh_token"],
                         marketplace_id=client.get("marketplace_id"),
                         region_endpoint=client.get("region_endpoint"),
+                        lwa_client_id=lwa_client_id,
+                        lwa_client_secret=lwa_client_secret,
                     )
         except Exception as exc:
             log.error("Worker poll error (will retry): %s", exc)

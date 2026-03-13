@@ -50,13 +50,15 @@ def get_settings(
     marketplace_id: Optional[str] = None,
     region_endpoint: Optional[str] = None,
     lwa_refresh_token: Optional[str] = None,
+    lwa_client_id: Optional[str] = None,
+    lwa_client_secret: Optional[str] = None,
 ) -> SPAPISettings:
     """Build SP-API settings.
 
     When marketplace_id / region_endpoint are provided (per-client dynamic
     values fetched from client_settings), they override the env-var defaults.
-    Callers that do not pass these args get the legacy env-var behaviour.
-    lwa_refresh_token may be passed explicitly to avoid mutating os.environ.
+    lwa_refresh_token, lwa_client_id, and lwa_client_secret may be passed
+    explicitly to avoid depending on env vars (e.g. in Railway worker).
     """
     effective_marketplace = marketplace_id or os.getenv("MARKETPLACE_ID_UAE", "A2VIGQ35RCS4UG")
     effective_endpoint = (
@@ -65,9 +67,11 @@ def get_settings(
         else region_endpoint
     ) or os.getenv("SP_API_ENDPOINT", "https://sellingpartnerapi-eu.amazon.com")
     effective_refresh_token = lwa_refresh_token or _required_env("LWA_REFRESH_TOKEN_UAE")
+    effective_client_id     = lwa_client_id     or _required_env("LWA_CLIENT_ID")
+    effective_client_secret = lwa_client_secret or _required_env("LWA_CLIENT_SECRET")
     return SPAPISettings(
-        lwa_client_id=_required_env("LWA_CLIENT_ID"),
-        lwa_client_secret=_required_env("LWA_CLIENT_SECRET"),
+        lwa_client_id=effective_client_id,
+        lwa_client_secret=effective_client_secret,
         lwa_refresh_token=effective_refresh_token,
         aws_access_key_id=_required_env("AWS_ACCESS_KEY_ID"),
         aws_secret_access_key=_required_env("AWS_SECRET_ACCESS_KEY"),
